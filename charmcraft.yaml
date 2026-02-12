@@ -1,0 +1,139 @@
+# This file configures Charmcraft.
+# See https://documentation.ubuntu.com/charmcraft/stable/reference/files/charmcraft-yaml-file/
+type: charm
+name: charmed-etcd-benchmark-operator
+title: Charm for etcd benchmarking tool
+summary: A very short one-line summary of the charm.
+description: |
+  A single sentence that says what the charm is, concisely and memorably.
+
+  A paragraph of one to three short sentences, that describe what the charm does.
+
+  A third paragraph that explains what need the charm meets.
+
+  Finally, a paragraph that describes whom the charm is useful for.
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+  arm64:
+
+parts:
+  charm:
+    plugin: uv
+    source: .
+    build-snaps:
+      - astral-uv
+  benchmark-tool:
+    plugin: dump
+    source: https://github.com/Soundarya03/etcd.git
+    source-type: git
+    source-tag: main
+    build-snaps: [go/latest/stable]
+    override-build: |
+      export GOBIN="$CRAFT_PART_INSTALL/bin"
+      go install -v ./tools/benchmark
+
+
+actions:
+#  prepare:
+#    description: |
+#      Prepares the workload.
+#
+  run:
+    description: |
+      Kickstart the benchmark service in this server.
+#
+#  stop:
+#    description: |
+#      Stops the benchmark service in this server.
+#
+#  get-summary:
+#    description: |
+#      Allow for the test result to be obtained in cases when COS or Upload are not needed.
+#      The benchmark result collection happens anyways and is be stored in a folder within the unit.
+#      It reports in the output (either table or json) where the user can find the collection tarball
+#      in its own filesystem in addition to basic test results
+#      (e.g. time elapsed, queries executed, queries per second, etc).
+#    parameters:
+#      output:
+#        description: |
+#          The output format of the summary. It can be either a table or a json.
+#        type: string
+#        enum: [ table, json ]
+#
+#  cleanup:
+#    description: |
+#      Cleans up the workload from the application and unsets all the prepared configuration.
+#
+#
+config:
+  options:
+    send-ca-cert:
+      description: Send the CA certificate instead of end-entity certificate
+      type: boolean
+      default: false
+#    test_name:
+#      default: "kafka-benchmark"
+#      type: string
+#      description: |
+#        Used to identify the test. MUST NOT be empty.
+#        It is the string that represents the given test (e.g. "aws_c6a.xlarge_3nodes_<WORKLOAD>").
+#        It is used by the collector to put the final data on the right place.
+#    parallel_processes:
+#      default: 1
+#      type: int
+#      description: |
+#        Number of parallel process managed by the benchmark tool. Minimum is 2.
+#    threads:
+#      default: 1
+#      type: int
+#      description: |
+#        Number of concurrent tasks within a given process.
+#        The best way to understand this concept is to imagine it
+#        as python coroutines running concurrently within the same process.
+#    duration:
+#      default: 0
+#      type: int
+#      description: |
+#        Time in seconds to run the benchmark, 0 means indefinitely.
+#    run_count:
+#      default: 0
+#      type: int
+#      description: |
+#        Number of counts to run, 0 means indefinitely.
+#        If both duration and run_count are set, duration takes precedence.
+#    workload_name:
+#      default: "default"
+#      type: string
+#      description: |
+#        The name of the workload to be prepared and used.
+#    override_access_hostname:
+#      default: ""
+#      type: string
+#      description: |
+#        Overrides the default relation endpoint shared via client relation,
+#        e.g. if we have a VIP in front of the databases and we want to test it through VIP instead of the relation's default value.
+#    report_interval:
+#      default: 1
+#      type: int
+#      description: |
+#        Int, number of seconds we should periodically report interval
+#
+#
+#peers: # needed?
+#  benchmark-peer:
+#    interface: benchmark_peers
+#
+#provides:
+#  cos-agent:
+#    interface: cos_agent
+#    limit: 1
+#  metrics-endpoint:
+#    interface: prometheus_scrape
+#
+requires:
+  etcd-client:
+    interface: etcd_client
+  certificates:
+    interface: tls-certificates
