@@ -100,29 +100,6 @@ class EtcdRequires(Object):
             DataContractV1[ResourceProviderModel],
         ).requests
 
-    # @property
-    # def credentials(self) -> dict[str, str | None] | None:
-    #     """Return the etcd credentials."""
-    #     remote_responses = self.remote_responses
-    #     if not remote_responses:
-    #         return None
-    #     remote_response = remote_responses[0]
-    #     return {
-    #         "username": ",".join([resp.username for resp in remote_responses if resp.username]),
-    #         "uris": remote_response.uris if remote_response.uris else None,
-    #         "endpoints": remote_response.endpoints,
-    #         "version": remote_response.version,
-    #         "tls-ca": remote_response.tls_ca if remote_response.tls_ca else None,
-    #     }
-    #
-    # def update_mtls_certs(self, cert: str) -> None:
-    #     """Set the mtls cert in the relation data bag."""
-    #     if not self.etcd_relation:
-    #         return
-    #     local_model = self.etcd_relation_local_model
-    #     local_model.requests[0].mtls_cert = cert
-    #     self.etcd_interface.interface.write_model(self.etcd_relation.id, local_model)
-
     def update_request_from_cert(self, cert: Certificate) -> None:
         """Update the requests in the relation data bag from the assigned certificates."""
         if not self.etcd_relation:

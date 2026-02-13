@@ -10,7 +10,7 @@ Use links instead.
 
 # charmed-etcd-benchmark-operator
 
-This is a machine charm for the etcd benchmarking tool.
+This is a machine charm for the [etcd benchmarking tool](https://github.com/etcd-io/etcd/tree/main/tools/benchmark).
 <!-- This charm will also include another benchmarking tool (etcdctl `check-perf`) soon -->
 It is meant to be deployed alongside charmed-etcd, in order to carry out performance benchmarking of the charmed etcd cluster.
 
