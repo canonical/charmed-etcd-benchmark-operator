@@ -6,10 +6,12 @@ from datetime import datetime, timedelta
 
 import jubilant
 from dateutil.parser import parse
-from jubilant import Juju
+
 
 def apps_active_and_agents_idle(status: jubilant.Status, *apps: str, idle_period: int = 0) -> bool:
-    """Check that all given apps are active, their agents idle (optional idle interval too) and optionally verify unit count as well.
+    """Check that all given apps are active, their agents idle.
+
+     Optionally, specify idle interval for agents and verify unit count as well.
 
     Args:
         status: represents the jubilant model's current status

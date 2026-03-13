@@ -2,6 +2,8 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Handle all TLS related events."""
+
 import logging
 import socket
 from typing import TYPE_CHECKING
@@ -25,6 +27,8 @@ class RefreshTLSCertificatesEvent(ops.EventBase):
 
 
 class TLSEvents(Object):
+    """Event handler class for TLS related events."""
+
     refresh_tls_certificates_event = ops.EventSource(RefreshTLSCertificatesEvent)
 
     def __init__(self, charm: "CharmedEtcdBenchmarkOperatorCharm"):

@@ -2,6 +2,8 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Base objects for workload operations."""
+
 import logging
 from abc import ABC, abstractmethod
 
@@ -9,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class WorkloadBase(ABC):
-    """Base interface for common workload operations."""
+    """Base interface for workload operations."""
 
     @abstractmethod
     def start(self) -> None:

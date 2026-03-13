@@ -2,15 +2,22 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Manage all things etcd_client interface related."""
+
 import logging
 from typing import TYPE_CHECKING
 
 import ops
 from charmlibs.interfaces.tls_certificates import Certificate
+from charms.data_platform_libs.v1.data_interfaces import (
+    DataContractV1,
+    RequirerCommonModel,
+    RequirerDataContractV1,
+    ResourceProviderModel,
+    build_model,
+)
 from ops import Object
 
-from charms.data_platform_libs.v1.data_interfaces import RequirerCommonModel, RequirerDataContractV1, build_model, \
-    ResourceProviderModel, DataContractV1
 from managers.tls import get_common_name_from_chain
 
 if TYPE_CHECKING:
@@ -20,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class EtcdInterfaceManager(Object):
+    """Manager class for etcd interface related events."""
 
     def __init__(self, charm: "CharmedEtcdBenchmarkOperatorCharm"):
         super().__init__(charm, key="tls-manager")
@@ -30,7 +38,11 @@ class EtcdInterfaceManager(Object):
         """Return the etcd relation if present."""
         if not hasattr(self.charm.etcd_interface_events, "etcd_interface"):
             return None
-        return self.charm.etcd_interface_events.etcd_interface.relations[0] if len(self.charm.etcd_interface_events.etcd_interface.relations) else None
+        return (
+            self.charm.etcd_interface_events.etcd_interface.relations[0]
+            if len(self.charm.etcd_interface_events.etcd_interface.relations)
+            else None
+        )
 
     @property
     def client_requests(self) -> list:
@@ -51,7 +63,9 @@ class EtcdInterfaceManager(Object):
         if not self.etcd_relation:
             raise RuntimeError("etcd relation not found")
         return build_model(
-            self.charm.etcd_interface_events.etcd_interface.interface.repository(self.etcd_relation.id),
+            self.charm.etcd_interface_events.etcd_interface.interface.repository(
+                self.etcd_relation.id
+            ),
             RequirerDataContractV1[RequirerCommonModel],
         )
 
@@ -101,4 +115,6 @@ class EtcdInterfaceManager(Object):
         requests_to_send.append(cur_request)
 
         local_model.requests = requests_to_send
-        self.charm.etcd_interface_events.etcd_interface.interface.write_model(self.etcd_relation.id, local_model)
+        self.charm.etcd_interface_events.etcd_interface.interface.write_model(
+            self.etcd_relation.id, local_model
+        )

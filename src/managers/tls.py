@@ -2,10 +2,12 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Manage all things TLS related."""
+
 import logging
 from typing import TYPE_CHECKING
 
-from charmlibs.interfaces.tls_certificates import PrivateKey, Certificate
+from charmlibs.interfaces.tls_certificates import Certificate, PrivateKey
 from ops import Object
 
 from literals import CLIENT_CERT_PATH, CLIENT_KEY_PATH
@@ -15,8 +17,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 class TLSManager(Object):
-    """Manage all TLS related events."""
+    """Manager class for TLS related events."""
 
     def __init__(self, charm: "CharmedEtcdBenchmarkOperatorCharm"):
         super().__init__(charm, key="tls-manager")
@@ -41,6 +44,7 @@ class TLSManager(Object):
         if Certificate(raw=raw_cert).common_name == common_name:
             return raw_cert
         return None
+
 
 def get_common_name_from_chain(mtls_cert: str) -> str:
     """Get common name from chain."""

@@ -16,6 +16,7 @@ CONCIERGE_MODEL_NAME = "testing"
 
 logger = logging.getLogger(__name__)
 
+
 @pytest.fixture(scope="package")
 def arch() -> str:
     """Fixture to provide the platform architecture for testing."""
@@ -60,7 +61,8 @@ def lxd_controller(lxd_cloud: str, juju: Juju):
 
 @pytest.fixture(scope="module")
 def juju_vm_model(arch: str, lxd_cloud: str, lxd_controller: str, juju: Juju):
-    # if concierge model ("testing") is found, such as on CI, continue with this. Else setup temp model.
+    # if concierge model ("testing") is found, such as on CI, continue with this.
+    # Else setup temp model.
     models = json.loads(juju.cli("models", "--format", "json", include_model=False))
 
     for model in models["models"]:

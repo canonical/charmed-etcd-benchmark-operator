@@ -8,7 +8,6 @@ import logging
 import pathlib
 
 import jubilant
-import pytest
 
 from tests.integration.jubilant_helpers import apps_active_and_agents_idle
 
@@ -16,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 ETCD_APP_NAME = "charmed-etcd"
 TLS_NAME = "self-signed-certificates"
-CHARMED_ETCD_BENCHMARK_OPERATOR = "charmed-etcd-benchmark-operator";
+CHARMED_ETCD_BENCHMARK_OPERATOR = "charmed-etcd-benchmark-operator"
+
 
 def test_deploy(charm: pathlib.Path, juju_vm_model: jubilant.Juju):
-    """Deploy the charm under test, and other charms necessary"""
+    """Deploy the charm under test, and other charms necessary."""
     juju_vm_model.deploy(charm.resolve(), app=CHARMED_ETCD_BENCHMARK_OPERATOR)
     juju_vm_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
     juju_vm_model.deploy(TLS_NAME, channel="1/edge")
@@ -37,4 +37,5 @@ def test_deploy(charm: pathlib.Path, juju_vm_model: jubilant.Juju):
         successes=1,
     )
 
-#TODO implement remaining tests
+
+# TODO implement remaining tests

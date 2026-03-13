@@ -2,6 +2,8 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Handle etcd benchmark tool related events."""
+
 import logging
 from subprocess import CalledProcessError
 from typing import TYPE_CHECKING
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class EtcdBenchmarkEvents(Object):
-    """Handle all base and etcd benchmark tool related events."""
+    """Event handler class for etcd benchmark tool related events."""
 
     def __init__(self, charm: "CharmedEtcdBenchmarkOperatorCharm"):
         super().__init__(charm, key="etcd_benchmark_events")
@@ -36,7 +38,9 @@ class EtcdBenchmarkEvents(Object):
     def _on_run_action(self, event: ops.ActionEvent):
         """Handle run action event."""
         if not self.charm.etcd_interface_manager.etcd_relation:
-            event.set_results({"ok": False, "stderr": "The etcd relation is needed in order to run this action"})
+            event.set_results(
+                {"ok": False, "stderr": "The etcd relation is needed in order to run this action"}
+            )
             return
 
         uris = self.charm.etcd_interface_manager.etcd_uris

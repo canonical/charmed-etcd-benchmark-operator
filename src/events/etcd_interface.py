@@ -2,6 +2,8 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Handle all etcd_client interface related events."""
+
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,22 +13,20 @@ from ops import Object
 if TYPE_CHECKING:
     from charm import CharmedEtcdBenchmarkOperatorCharm
 from charms.data_platform_libs.v1.data_interfaces import (
-    DataContractV1,
-    RequirerCommonModel,
-    RequirerDataContractV1,
     ResourceCreatedEvent,
     ResourceEndpointsChangedEvent,
     ResourceProviderModel,
     ResourceRequirerEventHandler,
-    build_model,
 )
 
-from literals import ETCD_DATA_DIR, CA_CERT_PATH
+from literals import CA_CERT_PATH, ETCD_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
 
 class EtcdInterfaceEvents(Object):
+    """Event handler class for etcd interface related events."""
+
     def __init__(self, charm: "CharmedEtcdBenchmarkOperatorCharm"):
         super().__init__(charm, "etcd_requirer_events")
         self.charm = charm
