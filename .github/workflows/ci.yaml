@@ -70,11 +70,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup lxd controller
-        if: ${{ 'lxd' == matrix.tests.provider }}
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: lxd
-          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
+          juju-channel: "3.6/stable"
           charmcraft-channel: "2.x/stable"
       - name: Download packed charm(s)
         timeout-minutes: 5
@@ -94,3 +93,5 @@ jobs:
         with:
           app: charmed-etcd-benchmark-operator
           model: testing
+
+#TODO concierge prepare

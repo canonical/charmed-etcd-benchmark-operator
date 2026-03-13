@@ -34,6 +34,8 @@ parts:
       export GOBIN="$CRAFT_PART_INSTALL/bin"
       go install -v ./tools/benchmark
 
+# TODO use new snap
+
 
 actions:
 # TODO: implement remaining actions, in line with DP's other benchmarking operators
