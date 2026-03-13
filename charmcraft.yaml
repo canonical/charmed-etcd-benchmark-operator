@@ -70,10 +70,6 @@ actions:
 #
 config:
   options:
-    send-ca-cert:
-      description: Send the CA certificate instead of end-entity certificate
-      type: boolean
-      default: false
 
 requires:
   etcd-client:

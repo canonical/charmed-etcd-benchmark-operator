@@ -49,7 +49,7 @@ integrate self-signed-certificates with charmed-etcd and charmed-etcd-benchmarki
 ```commandline
 juju integrate charmed-etcd:client-certificates self-signed-certificates
 
-juju integrate charmed-etcd-benchmarking-operator self-signed-certificates
+juju integrate charmed-etcd-benchmark-operator self-signed-certificates
 ```
 
 6. Once agents and apps have settled and integrations are available, the charmed-etcd-benchmarking-operator

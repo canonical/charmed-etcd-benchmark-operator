@@ -8,11 +8,12 @@ import logging
 
 import ops
 
-# A standalone module for workload-specific logic (no charming concerns):
 import workload
 from events.etcd_benchmark import EtcdBenchmarkEvents
-from events.etcd_requires import EtcdRequires
+from events.etcd_interface import EtcdInterfaceEvents
 from events.tls import TLSEvents
+from managers.etcd_interface import EtcdInterfaceManager
+from managers.tls import TLSManager
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +25,14 @@ class CharmedEtcdBenchmarkOperatorCharm(ops.CharmBase):
         super().__init__(*args)
         self.workload = workload.EtcdBenchmarkWorkload()
 
+        # --- MANAGERS ---
+        self.tls_manager = TLSManager(self)
+        self.etcd_interface_manager = EtcdInterfaceManager(self)
+
         # --- EVENT HANDLERS ---
         self.etcd_benchmark_events = EtcdBenchmarkEvents(self)
         self.tls_events = TLSEvents(self)
-        self.etcd_requires_events = EtcdRequires(self)
+        self.etcd_interface_events = EtcdInterfaceEvents(self)
 
 
 if __name__ == "__main__":  # pragma: nocover

@@ -3,65 +3,43 @@
 # See LICENSE file for licensing details.
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import ops
 from charmlibs.interfaces.tls_certificates import Certificate
 from ops import Object
 
+from charms.data_platform_libs.v1.data_interfaces import RequirerCommonModel, RequirerDataContractV1, build_model, \
+    ResourceProviderModel, DataContractV1
+from managers.tls import get_common_name_from_chain
+
 if TYPE_CHECKING:
     from charm import CharmedEtcdBenchmarkOperatorCharm
-from charms.data_platform_libs.v1.data_interfaces import (
-    DataContractV1,
-    RequirerCommonModel,
-    RequirerDataContractV1,
-    ResourceCreatedEvent,
-    ResourceEndpointsChangedEvent,
-    ResourceProviderModel,
-    ResourceRequirerEventHandler,
-    build_model,
-)
-
-from events.tls import get_common_name_from_chain
-from literals import BENCHMARK_KEY_PREFIX, ETCD_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
 
-class EtcdRequires(Object):
+class EtcdInterfaceManager(Object):
+
     def __init__(self, charm: "CharmedEtcdBenchmarkOperatorCharm"):
-        super().__init__(charm, "etcd_requirer_events")
+        super().__init__(charm, key="tls-manager")
         self.charm = charm
-        self.etcd_interface = ResourceRequirerEventHandler(
-            self.charm,
-            relation_name="etcd-client",
-            requests=self.client_requests,
-            response_model=ResourceProviderModel,
-        )
-
-        # Events pertaining to integration with Etcd charm
-
-        self.framework.observe(
-            self.etcd_interface.on.endpoints_changed, self._on_endpoints_changed
-        )
-        self.framework.observe(self.etcd_interface.on.resource_created, self._on_resource_created)
 
     @property
     def etcd_relation(self) -> ops.Relation | None:
         """Return the etcd relation if present."""
-        if not hasattr(self, "etcd_interface"):
+        if not hasattr(self.charm.etcd_interface_events, "etcd_interface"):
             return None
-        return self.etcd_interface.relations[0] if len(self.etcd_interface.relations) else None
+        return self.charm.etcd_interface_events.etcd_interface.relations[0] if len(self.charm.etcd_interface_events.etcd_interface.relations) else None
 
     @property
     def client_requests(self) -> list:
         """Return the client requests for the etcd requirer interface."""
         return [
             RequirerCommonModel(
-                resource=BENCHMARK_KEY_PREFIX,
-                mtls_cert=self.charm.tls_events.get_certificate_of_common_name(
-                    self.charm.tls_events.common_name
+                resource="",
+                mtls_cert=self.charm.tls_manager.get_certificate_of_common_name(
+                    self.charm.tls_manager.common_name
                 )
                 or "",
             )
@@ -73,7 +51,7 @@ class EtcdRequires(Object):
         if not self.etcd_relation:
             raise RuntimeError("etcd relation not found")
         return build_model(
-            self.etcd_interface.interface.repository(self.etcd_relation.id),
+            self.charm.etcd_interface_events.etcd_interface.interface.repository(self.etcd_relation.id),
             RequirerDataContractV1[RequirerCommonModel],
         )
 
@@ -94,7 +72,7 @@ class EtcdRequires(Object):
             return None
 
         return build_model(
-            self.etcd_interface.interface.repository(
+            self.charm.etcd_interface_events.etcd_interface.interface.repository(
                 self.etcd_relation.id, self.etcd_relation.app
             ),
             DataContractV1[ResourceProviderModel],
@@ -123,27 +101,4 @@ class EtcdRequires(Object):
         requests_to_send.append(cur_request)
 
         local_model.requests = requests_to_send
-        self.etcd_interface.interface.write_model(self.etcd_relation.id, local_model)
-
-    def _on_endpoints_changed(
-        self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]
-    ) -> None:
-        """Handle etcd client relation data changed event."""
-        response = event.response
-        logger.info("Endpoints changed: %s", response.endpoints)
-        if not response.endpoints:
-            logger.error("No endpoints available")
-
-    def _on_resource_created(self, event: ResourceCreatedEvent[ResourceProviderModel]) -> None:
-        """Handle resource created event."""
-        logger.info("Resource created")
-        response = event.response
-        if not response.tls_ca:
-            logger.error("No server CA chain available")
-            return
-        if not response.username:
-            logger.error("No username available")
-            return
-
-        Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
-        Path(f"{ETCD_DATA_DIR}/ca.pem").write_text(response.tls_ca)
+        self.charm.etcd_interface_events.etcd_interface.interface.write_model(self.etcd_relation.id, local_model)

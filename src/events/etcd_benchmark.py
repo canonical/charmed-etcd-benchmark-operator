@@ -3,7 +3,6 @@
 # See LICENSE file for licensing details.
 
 import logging
-from pathlib import Path
 from subprocess import CalledProcessError
 from typing import TYPE_CHECKING
 
@@ -12,7 +11,6 @@ from ops import Object
 
 if TYPE_CHECKING:
     from charm import CharmedEtcdBenchmarkOperatorCharm
-from literals import CLIENT_CERT_PATH, CLIENT_KEY_PATH, ETCD_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +35,11 @@ class EtcdBenchmarkEvents(Object):
 
     def _on_run_action(self, event: ops.ActionEvent):
         """Handle run action event."""
-        if not self.charm.etcd_requires_events.etcd_relation:
-            event.fail("The action can be run only after relation is created.")
-            event.set_results({"ok": False})
+        if not self.charm.etcd_interface_manager.etcd_relation:
+            event.set_results({"ok": False, "stderr": "The etcd relation is needed in order to run this action"})
             return
 
-        uris = self.charm.etcd_requires_events.etcd_uris
+        uris = self.charm.etcd_interface_manager.etcd_uris
 
         if not uris:
             event.fail("No uris available")
@@ -50,17 +47,6 @@ class EtcdBenchmarkEvents(Object):
             return
 
         logger.debug(f"Endpoints available for txn-mixed: {uris}")
-
-        certs, private_key = self.charm.tls_events.certificates.get_assigned_certificates()
-        cert = certs[0]
-        if not cert or not private_key:
-            event.fail("No certificate available")
-            return
-
-        # for cert in certs:
-        Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
-        Path(CLIENT_CERT_PATH).write_text(cert.certificate.raw)
-        Path(CLIENT_KEY_PATH).write_text(private_key.raw)
 
         try:
             results = self.charm.workload.run(endpoints=uris)

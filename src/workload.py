@@ -10,11 +10,12 @@ The intention is that this module could be used outside the context of a charm.
 import logging
 import os
 import subprocess
+from pathlib import Path
 
 from typing_extensions import override
 
 from core.workload import WorkloadBase
-from literals import BENCHMARK_KEY_PREFIX, CA_CERT_PATH, CLIENT_CERT_PATH, CLIENT_KEY_PATH
+from literals import CA_CERT_PATH, CLIENT_CERT_PATH, CLIENT_KEY_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,19 @@ class EtcdBenchmarkWorkload(WorkloadBase):
         )
         logger.debug(f"Benchmark health check successful: {help_text.stdout}")
 
+    @override
+    def write_file(self, content: str, file: str) -> None:
+        path = Path(file)
+        path.parent.mkdir(exist_ok=True, parents=True)
+        path.write_text(content)
+
+    @override
+    def read_file(self, file: str) -> str | None:
+        path = Path(file)
+        if not path.exists():
+            return None
+        return path.read_text()
+
     def run(self, endpoints: str) -> str:
         """Run `benchmark txn-mixed` command."""
         logger.info("Preparing to run benchmark put command...")
@@ -42,8 +56,6 @@ class EtcdBenchmarkWorkload(WorkloadBase):
             [
                 self.benchmark_tool,
                 "txn-mixed",
-                "--prefix",
-                BENCHMARK_KEY_PREFIX,
                 "--endpoints",
                 endpoints,
                 "--cert",

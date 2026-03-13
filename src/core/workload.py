@@ -15,3 +15,22 @@ class WorkloadBase(ABC):
     def start(self) -> None:
         """Start the workload service."""
         pass
+
+    @abstractmethod
+    def write_file(self, content: str, file: str) -> None:
+        """Write content to a file.
+
+        Args:
+            content (str): Content to write to the file.
+            file (str): Path to the file.
+        """
+        pass
+
+    @abstractmethod
+    def read_file(self, file: str) -> str | None:
+        """Read contents of a file.
+
+        Args:
+            file (str): Path to the file.
+        """
+        pass
