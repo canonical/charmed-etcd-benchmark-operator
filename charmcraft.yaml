@@ -3,20 +3,17 @@
 type: charm
 name: charmed-etcd-benchmark-operator
 title: Charm for etcd benchmarking tool
-summary: A very short one-line summary of the charm.
+summary: A charm of the etcd benchmark tool, to be used to carry out performance benchmarking of charmed-etcd
 description: |
-  A single sentence that says what the charm is, concisely and memorably.
+  This is a performance benchmarking charm for etcd.
 
-  A paragraph of one to three short sentences, that describe what the charm does.
+  It packages the benchmark tool from upstream etcd as a charm, and integrates with charmed-etcd over the etcd_client interface. 
+  It offers a run action to the user, which drives traffic to the etcd server and collects performance metrics. Various configs are made
+  available in the charm to tune the requests per second, number of connections, etc.
 
-  A third paragraph that explains what need the charm meets.
-
-  Finally, a paragraph that describes whom the charm is useful for.
-
-base: ubuntu@24.04
 platforms:
-  amd64:
-  arm64:
+  ubuntu@24.04:amd64:
+  ubuntu@24.04:arm64:
 
 parts:
   charm:
@@ -25,16 +22,18 @@ parts:
     build-snaps:
       - astral-uv
   benchmark-tool:
-    plugin: dump
-    source: https://github.com/Soundarya03/etcd.git
-    source-type: git
-    source-tag: main
-    build-snaps: [go/latest/stable]
-    override-build: |
-      export GOBIN="$CRAFT_PART_INSTALL/bin"
-      go install -v ./tools/benchmark
-
-# TODO use new snap
+    stage-snaps:
+      - charmed-etcd/3.6/edge
+#TODO remove
+#  benchmark-tool:
+#    plugin: dump
+#    source: https://github.com/Soundarya03/etcd.git
+#    source-type: git
+#    source-tag: main
+#    build-snaps: [go/latest/stable]
+#    override-build: |
+#      export GOBIN="$CRAFT_PART_INSTALL/bin"
+#      go install -v ./tools/benchmark
 
 
 actions:
@@ -45,11 +44,11 @@ actions:
 #
   run:
     description: |
-      Kickstart the benchmark service in this server.
+      Kickstart the benchmark service.
 #
 #  stop:
 #    description: |
-#      Stops the benchmark service in this server.
+#      Stops the benchmark service.
 #
 #  get-summary:
 #    description: |
