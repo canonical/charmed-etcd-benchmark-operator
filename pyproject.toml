@@ -11,8 +11,10 @@ requires-python = ">=3.10"
 # dependencies of any charmlibs that the charm uses (copy the dependencies from PYDEPS).
 dependencies = [
     "ops>=3,<4",
-    "charmlibs.interfaces.tls_certificates",
-    "data-platform-helpers"
+    "charmlibs-interfaces-tls-certificates",
+    "charmlibs-snap",
+    "data-platform-helpers",
+    "tenacity"
 ]
 
 [dependency-groups]
@@ -32,6 +34,7 @@ unit = [
 integration = [
     "jubilant",
     "pytest",
+    "python-dateutil"
 ]
 
 # Testing tools configuration

@@ -4,12 +4,14 @@
 # The integration tests use the Jubilant library. See https://documentation.ubuntu.com/jubilant/
 # To learn more about testing, see https://documentation.ubuntu.com/ops/latest/explanation/testing/
 
+"""A basic set of integration tests to verify charm functionality."""
+
 import logging
 import pathlib
 
 import jubilant
 
-from tests.integration.jubilant_helpers import apps_active_and_agents_idle
+from tests.integration.helpers import apps_active_and_agents_idle
 
 logger = logging.getLogger(__name__)
 

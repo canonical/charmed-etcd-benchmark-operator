@@ -97,24 +97,32 @@ class EtcdInterfaceManager(Object):
         if not self.etcd_relation:
             logger.warning("Relation isn't available yet")
             return
-        local_model = self.etcd_relation_local_model
 
-        request_common_names = {
-            get_common_name_from_chain(request.mtls_cert): request
-            for request in local_model.requests
-            if request.mtls_cert
-        }
+        try:
+            local_model = self.etcd_relation_local_model
 
-        requests_to_send = []
-        cur_request = request_common_names.get(
-            cert.common_name,
-            RequirerCommonModel(resource=f"/{cert.common_name}/"),
-        )
+            request_common_names = {
+                get_common_name_from_chain(request.mtls_cert): request
+                for request in local_model.requests
+                if request.mtls_cert
+            }
 
-        cur_request.mtls_cert = cert.raw
-        requests_to_send.append(cur_request)
+            requests_to_send = []
+            cur_request = request_common_names.get(
+                cert.common_name,
+                RequirerCommonModel(resource=f"/{cert.common_name}/"),
+            )
 
-        local_model.requests = requests_to_send
-        self.charm.etcd_interface_events.etcd_interface.interface.write_model(
-            self.etcd_relation.id, local_model
-        )
+            cur_request.mtls_cert = cert.raw
+            requests_to_send.append(cur_request)
+
+            local_model.requests = requests_to_send
+            self.charm.etcd_interface_events.etcd_interface.interface.write_model(
+                self.etcd_relation.id, local_model
+            )
+        except RuntimeError:
+            logger.error(
+                "Certificate available and etcd relation detected, "
+                "but unable to find etcd relation on local model."
+            )
+            return

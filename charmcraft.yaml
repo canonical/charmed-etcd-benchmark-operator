@@ -21,19 +21,6 @@ parts:
     source: .
     build-snaps:
       - astral-uv
-  benchmark-tool:
-    stage-snaps:
-      - charmed-etcd/3.6/edge
-#TODO remove
-#  benchmark-tool:
-#    plugin: dump
-#    source: https://github.com/Soundarya03/etcd.git
-#    source-type: git
-#    source-tag: main
-#    build-snaps: [go/latest/stable]
-#    override-build: |
-#      export GOBIN="$CRAFT_PART_INSTALL/bin"
-#      go install -v ./tools/benchmark
 
 
 actions:

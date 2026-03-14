@@ -103,8 +103,10 @@ version = "0.0.1"
 source = { virtual = "." }
 dependencies = [
     { name = "charmlibs-interfaces-tls-certificates" },
+    { name = "charmlibs-snap" },
     { name = "data-platform-helpers" },
     { name = "ops" },
+    { name = "tenacity" },
 ]
 
 [package.dev-dependencies]
@@ -126,8 +128,10 @@ unit = [
 [package.metadata]
 requires-dist = [
     { name = "charmlibs-interfaces-tls-certificates" },
+    { name = "charmlibs-snap" },
     { name = "data-platform-helpers" },
     { name = "ops", specifier = ">=3,<4" },
+    { name = "tenacity" },
 ]
 
 [package.metadata.requires-dev]
@@ -158,6 +162,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/53/62/5b67367bdfa103b1f3387e79ede47dcc4b409f75d25aa066edd884fadd53/charmlibs_interfaces_tls_certificates-1.6.1.tar.gz", hash = "sha256:b53a34479c6fbd943b53e970bd30d1defbc29d4959960894076140a81e373212", size = 134974, upload-time = "2026-02-05T15:53:06.099Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/c5/bc61043eed16e90c18c46dc4022167d271c6c2a8984b7f1a827122348cb2/charmlibs_interfaces_tls_certificates-1.6.1-py3-none-any.whl", hash = "sha256:ac331b4ce49b79ac7005717d684259def7fa1e6b1f222c7bd849d0d34bbd5f97", size = 23651, upload-time = "2026-02-05T15:53:04.776Z" },
+]
+
+[[package]]
+name = "charmlibs-snap"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-api" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4b/c1/376fc9b55f632e0578a3b1720a3a5a6570fcdb57caac3e41b49bf435ebb9/charmlibs_snap-1.0.1.tar.gz", hash = "sha256:07a13935909ea4b82c74b8e890b311894bcab2dd1c447246ee392bfd02a74f9c", size = 29324, upload-time = "2025-11-04T13:02:10.525Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/eb/630987d299b92fc6a17455878e9365e1c08b89bd34a022e9a7b7e5a2d1ec/charmlibs_snap-1.0.1-py3-none-any.whl", hash = "sha256:42bae5f55f6dbee014c94f8ab95eef3e249d4903f02412bef05ac5b324aa2783", size = 15359, upload-time = "2025-11-04T13:02:09.235Z" },
 ]
 
 [[package]]
@@ -723,6 +739,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/47/d4/1aaa7fb201a74181989970ebccd12f88c0fc074777027e2a21de5a90657e/ruff-0.12.10-py3-none-win32.whl", hash = "sha256:9de785e95dc2f09846c5e6e1d3a3d32ecd0b283a979898ad427a9be7be22b266", size = 11896089, upload-time = "2025-08-21T18:23:14.232Z" },
     { url = "https://files.pythonhosted.org/packages/ad/14/2ad38fd4037daab9e023456a4a40ed0154e9971f8d6aed41bdea390aabd9/ruff-0.12.10-py3-none-win_amd64.whl", hash = "sha256:7837eca8787f076f67aba2ca559cefd9c5cbc3a9852fd66186f4201b87c1563e", size = 13004616, upload-time = "2025-08-21T18:23:17.422Z" },
     { url = "https://files.pythonhosted.org/packages/24/3c/21cf283d67af33a8e6ed242396863af195a8a6134ec581524fd22b9811b6/ruff-0.12.10-py3-none-win_arm64.whl", hash = "sha256:cc138cc06ed9d4bfa9d667a65af7172b47840e1a98b02ce7011c391e54635ffc", size = 12074225, upload-time = "2025-08-21T18:23:20.137Z" },
+]
+
+[[package]]
+name = "tenacity"
+version = "9.1.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697ee8a44d3d69222b344920433d3b6666ccd9b374630c/tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a", size = 49413, upload-time = "2026-02-07T10:45:33.841Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
 ]
 
 [[package]]

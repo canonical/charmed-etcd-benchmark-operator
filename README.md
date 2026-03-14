@@ -25,7 +25,7 @@ charmcraft pack
 ```commandline
 juju add-model etcd-benchmarking
 
-juju deploy ./charmed-etcd-benchmark-operator_amd64.charm
+juju deploy ./charmed-etcd-benchmark-operator_ubuntu@24.04-amd64.charm
 ```
 
 3. Deploy [charmed-etcd](https://charmhub.io/charmed-etcd?channel=3.6/edge) from [Charmhub](https://charmhub.io/), with as many units as needed.

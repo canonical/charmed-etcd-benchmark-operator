@@ -26,8 +26,13 @@ class EtcdBenchmarkEvents(Object):
 
         # Core etcd benchmark charm events
 
+        self.framework.observe(self.charm.on.install, self._on_install)
         self.framework.observe(self.charm.on.start, self._on_start)
         self.framework.observe(self.charm.on.run_action, self._on_run_action)
+
+    def _on_install(self, event: ops.InstallEvent) -> None:
+        """Handle install event."""
+        self.charm.workload.install()
 
     def _on_start(self, event: ops.StartEvent) -> None:
         """Handle start event."""

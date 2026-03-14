@@ -24,11 +24,7 @@ class TLSManager(Object):
     def __init__(self, charm: "CharmedEtcdBenchmarkOperatorCharm"):
         super().__init__(charm, key="tls-manager")
         self.charm = charm
-
-    @property
-    def common_name(self) -> str:
-        """Return the common names for the client certificates."""
-        return "client1.etcd-benchmark-charm"
+        self.common_name = f"{self.charm.unit.name.replace('/', '')}-{self.charm.model.uuid}"
 
     def write_certificate(self, certificate: Certificate, private_key: PrivateKey):
         """Write certificate to disk."""
