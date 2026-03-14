@@ -53,9 +53,9 @@ jobs:
           use-labels: false
           fail-build: ${{ github.event_name == 'pull_request' }}
 
+#TODO    Temporarily skipping the build_charm workflow because of https://github.com/canonical/charmcraft/issues/2461
 #  build:
 #    name: Build charm
-#    Temporarily skipping the build_charm workflow because of https://github.com/canonical/charmcraft/issues/2461
 #    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v32.1.0
 #    steps:
 #      - Build the charm
@@ -66,7 +66,7 @@ jobs:
     needs:
       - lint
       - unit-test
-      - build
+#      - build
     steps:
       - name: Checkout
         uses: actions/checkout@v4
