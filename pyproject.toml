@@ -14,7 +14,9 @@ dependencies = [
     "charmlibs-interfaces-tls-certificates",
     "charmlibs-snap",
     "data-platform-helpers",
-    "tenacity"
+    "tenacity",
+    "jubilant",
+    "pytest-jubilant"
 ]
 
 [dependency-groups]
@@ -37,12 +39,15 @@ unit = [
     "coverage[toml]",
     "ops[testing]",
     "pytest",
+    {include-group = "charm"},
 ]
 # Dependencies of integration tests
 integration = [
     "jubilant",
     "pytest",
-    "python-dateutil"
+    "python-dateutil",
+    "jubilant",
+    "pytest-jubilant"
 ]
 
 # Testing tools configuration

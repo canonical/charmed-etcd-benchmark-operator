@@ -6,11 +6,14 @@
 
 import json
 import logging
+import os
+from pathlib import Path
 from platform import machine
 
 import jubilant
 import pytest
 from jubilant import Juju
+from pytest_jubilant import pack
 
 JUJU_TESTING_MODEL = "testing"
 
@@ -27,10 +30,11 @@ def arch() -> str:
     return platforms.get(machine(), "amd64")
 
 
-@pytest.fixture
-def charm(arch: str) -> str:
-    """Return path to the charmed-etcd-benchmark-operator charm file to use for testing."""
-    return f"./charmed-etcd-benchmark-operator_{arch}.charm"
+@pytest.fixture(scope="session")
+def charm():
+    if charm_file := os.environ.get("CHARM_PATH"):
+        return Path(charm_file)
+    return pack()
 
 
 @pytest.fixture(scope="module")
