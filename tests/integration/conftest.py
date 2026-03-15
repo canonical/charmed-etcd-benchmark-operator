@@ -12,7 +12,7 @@ import jubilant
 import pytest
 from jubilant import Juju
 
-CONCIERGE_MODEL_NAME = "testing"
+JUJU_TESTING_MODEL = "testing"
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +70,9 @@ def juju_vm_model(arch: str, lxd_cloud: str, lxd_controller: str, juju: Juju):
     models = json.loads(juju.cli("models", "--format", "json", include_model=False))
 
     for model in models["models"]:
-        if CONCIERGE_MODEL_NAME == model["short-name"]:
+        if JUJU_TESTING_MODEL == model["short-name"]:
             juju_lxd = jubilant.Juju(
-                model=f"{lxd_controller}:{CONCIERGE_MODEL_NAME}", wait_timeout=1000
+                model=f"{lxd_controller}:{JUJU_TESTING_MODEL}", wait_timeout=1000
             )
             juju_lxd.cli("set-model-constraints", f"arch={arch}")
             yield juju_lxd
