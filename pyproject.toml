@@ -18,13 +18,19 @@ dependencies = [
 ]
 
 [dependency-groups]
+charm = [
+    "ops>=3,<4",
+    "charmlibs-interfaces-tls-certificates",
+    "charmlibs-snap",
+    "data-platform-helpers",
+    "tenacity",
+]
 # Dependencies of linting and static type checks
 lint = [
     "ruff",
     "codespell",
     "pyright",
-    "charmlibs-interfaces-tls-certificates",
-    "tenacity"
+    {include-group = "charm"},
 ]
 # Dependencies of unit tests
 unit = [
