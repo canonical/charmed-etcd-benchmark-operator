@@ -23,6 +23,8 @@ lint = [
     "ruff",
     "codespell",
     "pyright",
+    "charmlibs-interfaces-tls-certificates",
+    "tenacity"
 ]
 # Dependencies of unit tests
 unit = [
