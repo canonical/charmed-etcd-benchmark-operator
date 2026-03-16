@@ -19,7 +19,7 @@ from charms.data_platform_libs.v1.data_interfaces import (
     ResourceRequirerEventHandler,
 )
 
-from literals import CA_CERT_PATH, ETCD_DATA_DIR
+from literals import CA_CERT_PATH, ETCD_SNAP_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -64,5 +64,5 @@ class EtcdInterfaceEvents(Object):
             logger.error("No username available")
             return
 
-        Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
+        Path(ETCD_SNAP_DATA_DIR).mkdir(parents=True, exist_ok=True)
         Path(CA_CERT_PATH).write_text(response.tls_ca)

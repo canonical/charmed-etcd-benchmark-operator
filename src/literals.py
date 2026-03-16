@@ -6,7 +6,7 @@
 
 SNAP_NAME = "charmed-etcd"
 SNAP_CHANNEL = "3.6/edge"
-ETCD_DATA_DIR = "/var/lib/etcd-benchmarking-charm/etcd"
-CLIENT_CERT_PATH = f"{ETCD_DATA_DIR}/client.pem"
-CLIENT_KEY_PATH = f"{ETCD_DATA_DIR}/client.key"
-CA_CERT_PATH = f"{ETCD_DATA_DIR}/ca.pem"
+ETCD_SNAP_DATA_DIR = "/var/snap/charmed-etcd/common"
+CLIENT_CERT_PATH = f"{ETCD_SNAP_DATA_DIR}/client.pem"
+CLIENT_KEY_PATH = f"{ETCD_SNAP_DATA_DIR}/client.key"
+CA_CERT_PATH = f"{ETCD_SNAP_DATA_DIR}/ca.pem"

@@ -24,7 +24,16 @@ class TLSManager(Object):
     def __init__(self, charm: "CharmedEtcdBenchmarkOperatorCharm"):
         super().__init__(charm, key="tls-manager")
         self.charm = charm
-        self.common_name = f"{self.charm.unit.name.replace('/', '')}-{self.charm.model.uuid}"
+
+    @property
+    def common_name(self) -> str:
+        """Build and return common name."""
+        unit = self.charm.unit.name.replace("/", "")
+        model_id = self.charm.model.uuid.split("-")[0]
+        # first 8 hex chars, because charmed-etcd-benchmark-operator is already too long
+        cn = f"{unit}-{model_id}"
+        logger.info("Computed common_name: %s (len=%d)", cn, len(cn))
+        return cn
 
     def write_certificate(self, certificate: Certificate, private_key: PrivateKey):
         """Write certificate to disk."""
