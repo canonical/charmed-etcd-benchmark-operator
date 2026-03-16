@@ -6,7 +6,7 @@
 
 import json
 import logging
-import os
+import subprocess
 from pathlib import Path
 from platform import machine
 
@@ -33,11 +33,19 @@ def arch() -> str:
 @pytest.fixture
 def benchmark_charm(arch: str):
     """Path to the packed benchmark charm file to use for testing."""
-    if charm_file := os.environ.get(
-        f"./charmed-etcd-benchmark-operator_ubuntu@24.04-{arch}.charm"
-    ):
-        return Path(charm_file)
-    return pack(platform=f"ubuntu@24.04:{arch}")
+    charm_file = Path(f"./charmed-etcd-benchmark-operator_ubuntu@24.04-{arch}.charm")
+    if charm_file.exists():
+        return charm_file
+    try:
+        return pack(platform=f"ubuntu@24.04:{arch}")
+    except subprocess.CalledProcessError as e:
+        pytest.fail(
+            "Failed to pack benchmark charm with charmcraft.\n"
+            f"Command: {e.cmd!r}\n"
+            f"Return code: {e.returncode}\n"
+            f"stdout:\n{e.stdout}\n"
+            f"stderr:\n{e.stderr}"
+        )
 
 
 # TODO deploy from CharmHub once key prefix changes are merged
