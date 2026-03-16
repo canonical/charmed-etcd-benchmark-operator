@@ -9,9 +9,8 @@
 import logging
 import pathlib
 
+from helpers import apps_active_and_agents_idle
 from jubilant import Juju
-
-from tests.integration.helpers import apps_active_and_agents_idle
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +51,3 @@ def test_integrate_benchmark_and_etcd_charms(juju_vm_model: Juju) -> None:
     run_action = juju_vm_model.run(f"{CHARMED_ETCD_BENCHMARK_OPERATOR}/0", "run")
     assert run_action.status == "completed", "Action should succeed"
     logger.info(f"Results of run: {run_action.results}")
-
-
-# TODO implement remaining tests

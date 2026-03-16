@@ -13,6 +13,7 @@ def test_start(monkeypatch: pytest.MonkeyPatch):
     """Test that the charm has the correct state after handling the start event."""
     # Arrange:
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
+
     # Act:
     state_out = ctx.run(ctx.on.start(), testing.State())
     # Assert:
