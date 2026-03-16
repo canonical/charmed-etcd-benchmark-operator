@@ -9,7 +9,7 @@
 import logging
 import pathlib
 
-import jubilant
+from jubilant import Juju
 
 from tests.integration.helpers import apps_active_and_agents_idle
 
@@ -20,10 +20,10 @@ TLS_NAME = "self-signed-certificates"
 CHARMED_ETCD_BENCHMARK_OPERATOR = "charmed-etcd-benchmark-operator"
 
 
-def test_deploy(charm: pathlib.Path, juju_vm_model: jubilant.Juju):
+def test_deploy(benchmark_charm: pathlib.Path, etcd_charm: pathlib.Path, juju_vm_model: Juju):
     """Deploy the charm under test, and other charms necessary."""
-    juju_vm_model.deploy(charm.resolve(), app=CHARMED_ETCD_BENCHMARK_OPERATOR)
-    juju_vm_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
+    juju_vm_model.deploy(benchmark_charm.resolve(), app=CHARMED_ETCD_BENCHMARK_OPERATOR)
+    juju_vm_model.deploy(etcd_charm, app=ETCD_APP_NAME, num_units=2)
     juju_vm_model.deploy(TLS_NAME, channel="1/edge")
 
     # enable TLS
@@ -38,6 +38,20 @@ def test_deploy(charm: pathlib.Path, juju_vm_model: jubilant.Juju):
         timeout=1200,
         successes=1,
     )
+
+
+def test_integrate_benchmark_and_etcd_charms(juju_vm_model: Juju) -> None:
+    """Test normal client charm relation."""
+    juju_vm_model.integrate(CHARMED_ETCD_BENCHMARK_OPERATOR, ETCD_APP_NAME)
+    juju_vm_model.wait(
+        lambda status: apps_active_and_agents_idle(
+            status, CHARMED_ETCD_BENCHMARK_OPERATOR, ETCD_APP_NAME, idle_period=10
+        )
+    )
+
+    run_action = juju_vm_model.run(f"{CHARMED_ETCD_BENCHMARK_OPERATOR}/0", "run")
+    assert run_action.status == "completed", "Action should succeed"
+    logger.info(f"Results of run: {run_action.results}")
 
 
 # TODO implement remaining tests

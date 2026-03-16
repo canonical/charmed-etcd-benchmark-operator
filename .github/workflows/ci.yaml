@@ -82,7 +82,7 @@ jobs:
           charmcraft-channel: "2.x/stable"
       - name: Add juju model for testing
         run:
-          juju add-model JUJU_TESTING_MODEL
+          juju add-model ${{ env.JUJU_TESTING_MODEL }}
 #      - name: Download packed charm(s)
 #        timeout-minutes: 5
 #        uses: actions/download-artifact@v4
@@ -94,10 +94,10 @@ jobs:
           tox run -e integration
       - name: Print debug-log
         if: failure()
-        run: juju switch JUJU_TESTING_MODEL; juju debug-log --replay --no-tail
+        run: juju switch ${{ env.JUJU_TESTING_MODEL }}; juju debug-log --replay --no-tail
       - name: Dump logs
         uses: canonical/charm-logdump-action@main
         if: failure()
         with:
           app: charmed-etcd-benchmark-operator
-          model: JUJU_TESTING_MODEL
+          model: ${{ env.JUJU_TESTING_MODEL }}

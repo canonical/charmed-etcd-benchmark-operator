@@ -31,10 +31,20 @@ def arch() -> str:
 
 
 @pytest.fixture(scope="session")
-def charm():
-    if charm_file := os.environ.get("CHARM_PATH"):
+def benchmark_charm(arch: str):
+    """Path to the packed benchmark charm file to use for testing."""
+    if charm_file := os.environ.get(
+        f"./charmed-etcd-benchmark-operator_ubuntu@24.04-{arch}.charm"
+    ):
         return Path(charm_file)
     return pack()
+
+
+# TODO deploy from CharmHub once key prefix changes are merged
+@pytest.fixture
+def etcd_charm(arch: str) -> str:
+    """Path to the etcd charm file to use for testing."""
+    return f"./charmed-etcd_ubuntu@24.04-{arch}.charm"
 
 
 @pytest.fixture(scope="module")
