@@ -16,7 +16,7 @@ jobs:
     name: Lint
     uses: canonical/data-platform-workflows/.github/workflows/lint.yaml@v32.1.0
 
-#TODO finish writing unit tests
+# TODO finish writing unit tests
 #  unit-test:
 #    name: Unit test charm
 #    runs-on: ubuntu-latest
@@ -54,7 +54,7 @@ jobs:
           use-labels: false
           fail-build: ${{ github.event_name == 'pull_request' }}
 
-#TODO Temporarily skipping the build_charm workflow because of https://github.com/canonical/charmcraft/issues/2461
+# TODO Temporarily skipping the build_charm workflow because of https://github.com/canonical/charmcraft/issues/2461
 # Charm will instead be build in a jubilant fixture
 #  build:
 #    name: Build charm
@@ -80,19 +80,13 @@ jobs:
           provider: lxd
           juju-channel: "3.6/stable"
           charmcraft-channel: "2.x/stable"
+      - name: Upgrade charmcraft
+        run: |
+          sudo snap refresh charmcraft --channel=latest/stable
+          charmcraft version
       - name: Add juju model for testing
         run:
           juju add-model ${{ env.JUJU_TESTING_MODEL }}
-#      - name: Download packed charm(s)
-#        timeout-minutes: 5
-#        uses: actions/download-artifact@v4
-#        with:
-#          pattern: ${{ needs.build.outputs.artifact-prefix }}-*
-#          merge-multiple: true
-      - name: Upgrade charmcraft
-        run:
-          sudo snap refresh charmcraft --channel=latest/stable
-          charmcraft version
       - name: Run integration tests
         run:
           tox run -e integration
