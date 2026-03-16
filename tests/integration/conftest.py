@@ -37,7 +37,7 @@ def benchmark_charm(arch: str):
         f"./charmed-etcd-benchmark-operator_ubuntu@24.04-{arch}.charm"
     ):
         return Path(charm_file)
-    return pack()
+    return pack(platform=f"ubuntu@24.04:{arch}")
 
 
 # TODO deploy from CharmHub once key prefix changes are merged
