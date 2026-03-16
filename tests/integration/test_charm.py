@@ -50,4 +50,5 @@ def test_integrate_benchmark_and_etcd_charms(juju_vm_model: Juju) -> None:
 
     run_action = juju_vm_model.run(f"{CHARMED_ETCD_BENCHMARK_OPERATOR}/0", "run")
     assert run_action.status == "completed", "Action should succeed"
+    assert "bench with linearizable range" in str(run_action.results["results"])
     logger.info(f"Results of run: {run_action.results}")
