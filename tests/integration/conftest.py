@@ -30,7 +30,7 @@ def arch() -> str:
     return platforms.get(machine(), "amd64")
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def benchmark_charm(arch: str):
     """Path to the packed benchmark charm file to use for testing."""
     if charm_file := os.environ.get(
