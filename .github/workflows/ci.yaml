@@ -89,9 +89,10 @@ jobs:
 #        with:
 #          pattern: ${{ needs.build.outputs.artifact-prefix }}-*
 #          merge-multiple: true
-      - name: Install charmcraft to pack charm
+      - name: Upgrade charmcraft
         run:
-          sudo snap install charmcraft
+          sudo snap refresh charmcraft --channel=latest/stable
+          charmcraft version
       - name: Run integration tests
         run:
           tox run -e integration
