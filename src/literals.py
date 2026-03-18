@@ -6,7 +6,7 @@
 
 SNAP_NAME = "charmed-etcd"
 SNAP_CHANNEL = "3.6/edge"
-ETCD_SNAP_DATA_DIR = "/var/snap/charmed-etcd/common"
-CLIENT_CERT_PATH = f"{ETCD_SNAP_DATA_DIR}/client.pem"
-CLIENT_KEY_PATH = f"{ETCD_SNAP_DATA_DIR}/client.key"
-CA_CERT_PATH = f"{ETCD_SNAP_DATA_DIR}/ca.pem"
+TLS_ROOT_DIR = "/var/snap/charmed-etcd/current/tls"
+CLIENT_CERT_PATH = f"{TLS_ROOT_DIR}/client.pem"
+CLIENT_KEY_PATH = f"{TLS_ROOT_DIR}/client.key"
+CA_CERT_PATH = f"{TLS_ROOT_DIR}/ca.pem"

@@ -7,7 +7,8 @@
 import logging
 from typing import TYPE_CHECKING
 
-from charmlibs.interfaces.tls_certificates import Certificate, PrivateKey
+import ops
+from charmlibs.interfaces.tls_certificates import CertificateAvailableEvent
 from ops import Object
 
 from literals import CLIENT_CERT_PATH, CLIENT_KEY_PATH
@@ -25,36 +26,27 @@ class TLSManager(Object):
         super().__init__(charm, key="tls-manager")
         self.charm = charm
 
-    @property
-    def common_name(self) -> str:
-        """Build and return common name."""
-        unit = self.charm.unit.name.replace("/", "")
-        model_id = self.charm.model.uuid.split("-")[0]
-        # first 8 hex chars, because charmed-etcd-benchmark-operator is already too long
-        cn = f"{unit}-{model_id}"
-        logger.info("Computed common_name: %s (len=%d)", cn, len(cn))
-        return cn
+    def handle_certificate_available(self, event: CertificateAvailableEvent) -> None:
+        """Handle certificate available event."""
+        logger.info("Certificate available")
 
-    def write_certificate(self, certificate: Certificate, private_key: PrivateKey):
-        """Write certificate to disk."""
-        logger.debug("Writing certificates to disk")
-        self.charm.workload.write_file(certificate.raw, CLIENT_CERT_PATH)
-        self.charm.workload.write_file(private_key.raw, CLIENT_KEY_PATH)
+        certs, private_key = self.charm.tls_state.assigned_certificates
+        if not certs or not private_key:
+            logger.error("No certificates available")
+            return
 
-    def get_certificate_of_common_name(self, common_name: str) -> str | None:
-        """Return the certificate for a given common name."""
-        raw_cert = self.charm.workload.read_file(CLIENT_CERT_PATH)
-        if not raw_cert:
-            return None
-        if Certificate(raw=raw_cert).common_name == common_name:
-            return raw_cert
-        return None
+        cert = certs[0]
 
+        if cert.certificate != event.certificate:
+            logger.error("Received certificate does not match assigned certificate: %s", cert)
+            return
 
-def get_common_name_from_chain(mtls_cert: str) -> str:
-    """Get common name from chain."""
-    raw_cas = [
-        cert.strip() for cert in mtls_cert.split("-----END CERTIFICATE-----") if cert.strip()
-    ]
-    cert = raw_cas[0] + "\n-----END CERTIFICATE-----"
-    return Certificate.from_string(cert).common_name
+        try:
+            self.charm.workload.write_file(cert.certificate.raw, CLIENT_CERT_PATH)
+            self.charm.workload.write_file(private_key.raw, CLIENT_KEY_PATH)
+        except Exception as e:
+            logger.error("Error writing TLS certificates to disk: %s", e)
+            self.charm.unit.status = ops.BlockedStatus("Error writing TLS certificates to disk")
+            return
+
+        self.charm.etcd_interface_manager.update_request_from_cert(cert.certificate)

@@ -5,7 +5,6 @@
 """Handle all etcd_client interface related events."""
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ops import Object
@@ -18,8 +17,6 @@ from charms.data_platform_libs.v1.data_interfaces import (
     ResourceProviderModel,
     ResourceRequirerEventHandler,
 )
-
-from literals import CA_CERT_PATH, ETCD_SNAP_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -44,25 +41,10 @@ class EtcdInterfaceEvents(Object):
         )
         self.framework.observe(self.etcd_interface.on.resource_created, self._on_resource_created)
 
-    def _on_endpoints_changed(
-        self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]
-    ) -> None:
+    def _on_endpoints_changed(self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]) -> None:
         """Handle etcd client relation data changed event."""
-        response = event.response
-        logger.info("Endpoints changed: %s", response.endpoints)
-        if not response.endpoints:
-            logger.error("No endpoints available")
+        self.charm.etcd_interface_manager.handle_endpoints_changed(event)
 
     def _on_resource_created(self, event: ResourceCreatedEvent[ResourceProviderModel]) -> None:
         """Handle resource created event."""
-        logger.info("Resource created")
-        response = event.response
-        if not response.tls_ca:
-            logger.error("No server CA chain available")
-            return
-        if not response.username:
-            logger.error("No username available")
-            return
-
-        Path(ETCD_SNAP_DATA_DIR).mkdir(parents=True, exist_ok=True)
-        Path(CA_CERT_PATH).write_text(response.tls_ca)
+        self.charm.etcd_interface_manager.handle_resource_created(event)

@@ -39,7 +39,7 @@ class TLSEvents(Object):
             "certificates",
             certificate_requests=[
                 CertificateRequestAttributes(
-                    common_name=self.charm.tls_manager.common_name,
+                    common_name=self.charm.tls_state.common_name,
                     sans_ip=frozenset({socket.gethostbyname(socket.gethostname())}),
                     sans_dns=frozenset({self.charm.unit.name, socket.gethostname()}),
                 )
@@ -53,14 +53,4 @@ class TLSEvents(Object):
 
     def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
         """Handle certificate available event."""
-        logger.info("Certificate available")
-        certs, private_key = self.certificates.get_assigned_certificates()
-
-        if not certs or not private_key:
-            logger.error("No certificates available")
-            return
-
-        cert = certs[0]
-        self.charm.tls_manager.write_certificate(cert.certificate, private_key)
-        if self.charm.etcd_interface_manager.etcd_relation:
-            self.charm.etcd_interface_manager.update_request_from_cert(cert.certificate)
+        self.charm.tls_manager.handle_certificate_available(event)

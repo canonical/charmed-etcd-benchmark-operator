@@ -9,6 +9,7 @@ from subprocess import CalledProcessError
 from typing import TYPE_CHECKING
 
 import ops
+from charmlibs import snap
 from ops import Object
 
 if TYPE_CHECKING:
@@ -32,27 +33,40 @@ class EtcdBenchmarkEvents(Object):
 
     def _on_install(self, event: ops.InstallEvent) -> None:
         """Handle install event."""
-        self.charm.workload.install()
+        self.charm.unit.status = ops.MaintenanceStatus("installing workload")
+
+        try:
+            self.charm.workload.install()
+        except snap.SnapError as e:
+            logger.error(f"Error installing workload: {e.message}")
+            self.charm.unit.status = ops.BlockedStatus("Error installing the workload")
+            return
+
+        self.charm.unit.status = ops.MaintenanceStatus("installed workload")
 
     def _on_start(self, event: ops.StartEvent) -> None:
         """Handle start event."""
         self.charm.unit.status = ops.MaintenanceStatus("starting workload")
-        self.charm.workload.start()
+
+        try:
+            self.charm.workload.start()
+        except CalledProcessError as e:
+            logger.error(f"Error starting workload: {e.stderr}")
+            self.charm.unit.status = ops.BlockedStatus("Error starting the workload")
+            return
+
         self.charm.unit.status = ops.ActiveStatus()
 
     def _on_run_action(self, event: ops.ActionEvent):
         """Handle run action event."""
-        if not self.charm.etcd_interface_manager.etcd_relation:
-            event.set_results(
-                {"ok": False, "stderr": "The etcd relation is needed in order to run this action"}
-            )
+        if not self.charm.etcd_interface_state.relation:
+            event.set_results({"error": "The etcd relation is needed in order to run this action"})
+            event.fail("The etcd relation is needed in order to run this action")
             return
 
-        uris = self.charm.etcd_interface_manager.etcd_uris
-
-        if not uris:
-            event.fail("No uris available")
-            event.set_results({"ok": False})
+        if not (uris := self.charm.etcd_interface_state.uris):
+            event.set_results({"error": "No etcd uris available"})
+            event.fail("No etcd uris available")
             return
 
         logger.debug(f"Endpoints available for txn-mixed: {uris}")

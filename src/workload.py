@@ -65,10 +65,10 @@ class EtcdBenchmarkWorkload(WorkloadBase):
             return None
         return path.read_text()
 
-    def run(self, endpoints: str) -> str:
+    def run(self, endpoints: str) -> list[str]:
         """Run `charmed-etcd.benchmark txn-mixed` command."""
         logger.info("Preparing to run benchmark put command...")
-        put_benchmark = subprocess.check_output(
+        put_benchmark = subprocess.run(
             [
                 self.benchmark_tool,
                 "txn-mixed",
@@ -80,7 +80,15 @@ class EtcdBenchmarkWorkload(WorkloadBase):
                 CLIENT_KEY_PATH,
                 "--cacert",
                 CA_CERT_PATH,
-            ]
+            ],
+            capture_output=True,
+            check=True,
         )
-        logger.info(f"Benchmark put command successful: {put_benchmark.decode('utf-8').strip()}")
-        return put_benchmark.decode("utf-8").strip()
+
+        newline = "\n"
+        logger.info(
+            f"Benchmark put command successful: {
+                put_benchmark.stdout.decode('utf-8').strip().split(newline)
+            }"
+        )
+        return put_benchmark.stdout.decode("utf-8").strip().split(newline)

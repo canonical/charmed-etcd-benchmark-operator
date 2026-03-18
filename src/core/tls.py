@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+"""State for TLS-related data."""
+
+import logging
+from typing import TYPE_CHECKING
+
+from charmlibs.interfaces.tls_certificates import Certificate, PrivateKey
+from ops import Object
+
+from literals import CLIENT_CERT_PATH
+
+if TYPE_CHECKING:
+    from charm import CharmedEtcdBenchmarkOperatorCharm
+
+logger = logging.getLogger(__name__)
+
+
+class TLSState(Object):
+    """State wrapper for TLS-related charm/library state."""
+
+    def __init__(self, charm: "CharmedEtcdBenchmarkOperatorCharm"):
+        super().__init__(charm, key="tls-state")
+        self.charm = charm
+
+    @property
+    def common_name(self) -> str:
+        """Build and return common name."""
+        unit = self.charm.unit.name.replace("/", "")
+        model_id = self.charm.model.uuid.split("-")[0]
+        cn = f"{unit}-{model_id}"
+        logger.debug("Computed common_name: %s (len=%d)", cn, len(cn))
+        return cn
+
+    @property
+    def assigned_certificates(self) -> tuple[list, PrivateKey] | tuple[None, None]:
+        """Return assigned certificates and private key from the TLS relation."""
+        certs, private_key = self.charm.tls_events.certificates.get_assigned_certificates()
+        if not certs or not private_key:
+            return None, None
+        return certs, private_key
+
+    @property
+    def stored_certificate_raw(self) -> str | None:
+        """Return stored client certificate from disk."""
+        return self.charm.workload.read_file(CLIENT_CERT_PATH)
+
+    def get_stored_certificate_of_common_name(self, common_name: str) -> str | None:
+        """Return the stored certificate if it matches the provided common name."""
+        raw_cert = self.stored_certificate_raw
+        if not raw_cert:
+            return None
+        if Certificate(raw=raw_cert).common_name == common_name:
+            return raw_cert
+        return None

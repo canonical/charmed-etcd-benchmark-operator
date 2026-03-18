@@ -9,6 +9,8 @@ import logging
 import ops
 
 import workload
+from core.interfaces import EtcdInterfaceState
+from core.tls import TLSState
 from events.etcd_benchmark import EtcdBenchmarkEvents
 from events.etcd_interface import EtcdInterfaceEvents
 from events.tls import TLSEvents
@@ -28,6 +30,10 @@ class CharmedEtcdBenchmarkOperatorCharm(ops.CharmBase):
         # --- MANAGERS ---
         self.tls_manager = TLSManager(self)
         self.etcd_interface_manager = EtcdInterfaceManager(self)
+
+        # --- STATE ---
+        self.etcd_interface_state = EtcdInterfaceState(self)
+        self.tls_state = TLSState(self)
 
         # --- EVENT HANDLERS ---
         self.etcd_benchmark_events = EtcdBenchmarkEvents(self)

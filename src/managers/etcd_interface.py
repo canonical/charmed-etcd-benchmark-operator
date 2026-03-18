@@ -7,18 +7,13 @@
 import logging
 from typing import TYPE_CHECKING
 
-import ops
 from charmlibs.interfaces.tls_certificates import Certificate
-from charms.data_platform_libs.v1.data_interfaces import (
-    DataContractV1,
-    RequirerCommonModel,
-    RequirerDataContractV1,
-    ResourceProviderModel,
-    build_model,
-)
+from charms.data_platform_libs.v1.data_interfaces import RequirerCommonModel, ResourceEndpointsChangedEvent, \
+    ResourceProviderModel, ResourceCreatedEvent
 from ops import Object
 
-from managers.tls import get_common_name_from_chain
+from literals import CA_CERT_PATH
+from utils.certificates import get_common_name_from_chain
 
 if TYPE_CHECKING:
     from charm import CharmedEtcdBenchmarkOperatorCharm
@@ -30,99 +25,59 @@ class EtcdInterfaceManager(Object):
     """Manager class for etcd interface related events."""
 
     def __init__(self, charm: "CharmedEtcdBenchmarkOperatorCharm"):
-        super().__init__(charm, key="tls-manager")
+        super().__init__(charm, key="etcd-interface-manager")
         self.charm = charm
 
     @property
-    def etcd_relation(self) -> ops.Relation | None:
-        """Return the etcd relation if present."""
-        if not hasattr(self.charm.etcd_interface_events, "etcd_interface"):
-            return None
-        return (
-            self.charm.etcd_interface_events.etcd_interface.relations[0]
-            if len(self.charm.etcd_interface_events.etcd_interface.relations)
-            else None
-        )
-
-    @property
-    def client_requests(self) -> list:
+    def client_requests(self) -> list[RequirerCommonModel]:
         """Return the client requests for the etcd requirer interface."""
         return [
             RequirerCommonModel(
                 resource="",
-                mtls_cert=self.charm.tls_manager.get_certificate_of_common_name(
-                    self.charm.tls_manager.common_name
+                mtls_cert=self.charm.tls_state.get_stored_certificate_of_common_name(
+                    self.charm.tls_state.common_name
                 )
                 or "",
             )
         ]
 
-    @property
-    def etcd_relation_local_model(self) -> RequirerDataContractV1[RequirerCommonModel]:
-        """Return the etcd relation local model."""
-        if not self.etcd_relation:
-            raise RuntimeError("etcd relation not found")
-        return build_model(
-            self.charm.etcd_interface_events.etcd_interface.interface.repository(
-                self.etcd_relation.id
-            ),
-            RequirerDataContractV1[RequirerCommonModel],
-        )
-
-    @property
-    def etcd_uris(self) -> str | None:
-        """Return the etcd uris."""
-        remote_responses = self.remote_responses
-        if not remote_responses:
-            return None
-        remote_response = remote_responses[0]
-        return remote_response.uris
-
-    @property
-    def remote_responses(self) -> list[ResourceProviderModel] | None:
-        """Return the remote response model."""
-        if not self.etcd_relation:
-            logger.warning("Relation isn't available yet")
-            return None
-
-        return build_model(
-            self.charm.etcd_interface_events.etcd_interface.interface.repository(
-                self.etcd_relation.id, self.etcd_relation.app
-            ),
-            DataContractV1[ResourceProviderModel],
-        ).requests
-
     def update_request_from_cert(self, cert: Certificate) -> None:
         """Update the requests in the relation data bag from the assigned certificates."""
-        if not self.etcd_relation:
-            logger.warning("Relation isn't available yet")
+        local_model = self.charm.etcd_interface_state.local_model
+        if not local_model:
             return
 
-        try:
-            local_model = self.etcd_relation_local_model
+        request_common_names = {
+            get_common_name_from_chain(request.mtls_cert): request
+            for request in local_model.requests
+            if request.mtls_cert
+        }
 
-            request_common_names = {
-                get_common_name_from_chain(request.mtls_cert): request
-                for request in local_model.requests
-                if request.mtls_cert
-            }
+        cur_request = request_common_names.get(
+            cert.common_name,
+            RequirerCommonModel(resource=f"/{cert.common_name}/"),
+        )
+        cur_request.mtls_cert = cert.raw
 
-            requests_to_send = []
-            cur_request = request_common_names.get(
-                cert.common_name,
-                RequirerCommonModel(resource=f"/{cert.common_name}/"),
-            )
+        local_model.requests = [cur_request]
+        self.charm.etcd_interface_state.write_local_model(local_model)
 
-            cur_request.mtls_cert = cert.raw
-            requests_to_send.append(cur_request)
+    def handle_endpoints_changed(self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]) -> None:
+        """Handle etcd client relation data changed event."""
+        response = event.response
+        logger.info("Endpoints changed: %s", response.endpoints)
+        if not response.endpoints:
+            logger.error("No endpoints available")
 
-            local_model.requests = requests_to_send
-            self.charm.etcd_interface_events.etcd_interface.interface.write_model(
-                self.etcd_relation.id, local_model
-            )
-        except RuntimeError:
-            logger.error(
-                "Certificate available and etcd relation detected, "
-                "but unable to find etcd relation on local model."
-            )
+    def handle_resource_created(self, event: ResourceCreatedEvent[ResourceProviderModel]) -> None:
+        """Handle resource created event."""
+        logger.info("Resource created")
+        response = event.response
+        if not response.tls_ca:
+            logger.error("No server CA chain available")
             return
+        if not response.username:
+            logger.error("No username available")
+            return
+
+        self.charm.workload.write_file(response.tls_ca, CA_CERT_PATH)

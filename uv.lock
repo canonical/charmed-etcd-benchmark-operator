@@ -106,7 +106,8 @@ dependencies = [
     { name = "charmlibs-snap" },
     { name = "data-platform-helpers" },
     { name = "jubilant" },
-    { name = "ops" },
+    { name = "ops", extra = ["testing"] },
+    { name = "pytest" },
     { name = "pytest-jubilant" },
     { name = "tenacity" },
 ]
@@ -122,6 +123,7 @@ charm = [
 integration = [
     { name = "jubilant" },
     { name = "pytest" },
+    { name = "pytest-jubilant" },
     { name = "python-dateutil" },
 ]
 lint = [
@@ -151,6 +153,8 @@ requires-dist = [
     { name = "data-platform-helpers" },
     { name = "jubilant" },
     { name = "ops", specifier = ">=3,<4" },
+    { name = "ops", extras = ["testing"] },
+    { name = "pytest" },
     { name = "pytest-jubilant" },
     { name = "tenacity" },
 ]
@@ -166,6 +170,7 @@ charm = [
 integration = [
     { name = "jubilant" },
     { name = "pytest" },
+    { name = "pytest-jubilant" },
     { name = "python-dateutil" },
 ]
 lint = [

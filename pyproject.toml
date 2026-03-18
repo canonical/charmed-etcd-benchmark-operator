@@ -16,7 +16,9 @@ dependencies = [
     "data-platform-helpers",
     "tenacity",
     "jubilant",
-    "pytest-jubilant"
+    "pytest-jubilant",
+    "ops[testing]",
+    "pytest"
 ]
 
 [dependency-groups]
