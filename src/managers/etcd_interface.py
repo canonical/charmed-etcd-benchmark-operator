@@ -8,8 +8,12 @@ import logging
 from typing import TYPE_CHECKING
 
 from charmlibs.interfaces.tls_certificates import Certificate
-from charms.data_platform_libs.v1.data_interfaces import RequirerCommonModel, ResourceEndpointsChangedEvent, \
-    ResourceProviderModel, ResourceCreatedEvent
+from charms.data_platform_libs.v1.data_interfaces import (
+    RequirerCommonModel,
+    ResourceCreatedEvent,
+    ResourceEndpointsChangedEvent,
+    ResourceProviderModel,
+)
 from ops import Object
 
 from literals import CA_CERT_PATH
@@ -62,7 +66,9 @@ class EtcdInterfaceManager(Object):
         local_model.requests = [cur_request]
         self.charm.etcd_interface_state.write_local_model(local_model)
 
-    def handle_endpoints_changed(self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]) -> None:
+    def handle_endpoints_changed(
+        self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]
+    ) -> None:
         """Handle etcd client relation data changed event."""
         response = event.response
         logger.info("Endpoints changed: %s", response.endpoints)

@@ -6,6 +6,7 @@
 
 from charmlibs.interfaces.tls_certificates import Certificate
 
+
 def get_common_name_from_chain(mtls_cert: str) -> str:
     """Get common name from chain."""
     raw_cas = [

@@ -20,6 +20,7 @@ from workload import EtcdBenchmarkWorkload
 
 # Helpers
 
+
 def _mock_snap_cache():
     """Return a patched SnapCache and the mocked snap object."""
     mock_snap = MagicMock()

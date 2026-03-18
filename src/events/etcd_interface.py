@@ -41,7 +41,9 @@ class EtcdInterfaceEvents(Object):
         )
         self.framework.observe(self.etcd_interface.on.resource_created, self._on_resource_created)
 
-    def _on_endpoints_changed(self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]) -> None:
+    def _on_endpoints_changed(
+        self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]
+    ) -> None:
         """Handle etcd client relation data changed event."""
         self.charm.etcd_interface_manager.handle_endpoints_changed(event)
 

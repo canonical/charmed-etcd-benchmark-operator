@@ -82,9 +82,7 @@ def test_update_request_from_cert_updates_existing_request():
     from managers import etcd_interface as etcd_interface_module
 
     original = etcd_interface_module.get_common_name_from_chain
-    etcd_interface_module.get_common_name_from_chain = MagicMock(
-        return_value="test-common-name"
-    )
+    etcd_interface_module.get_common_name_from_chain = MagicMock(return_value="test-common-name")
 
     try:
         etcd_interface_manager.update_request_from_cert(cert)

@@ -17,7 +17,7 @@ def _make_etcd_interface_state():
 
 
 def test_relation_returns_none_if_etcd_interface_missing():
-    """relation should return None if the etcd interface handler is unavailable."""
+    """Relation should return None if the etcd interface handler is unavailable."""
     etcd_interface_state, charm = _make_etcd_interface_state()
 
     del charm.etcd_interface_events.etcd_interface
@@ -26,7 +26,7 @@ def test_relation_returns_none_if_etcd_interface_missing():
 
 
 def test_relation_returns_none_if_no_relations():
-    """relation should return None if no relations are present."""
+    """Relation should return None if no relations are present."""
     etcd_interface_state, charm = _make_etcd_interface_state()
 
     charm.etcd_interface_events.etcd_interface.relations = []
@@ -35,7 +35,7 @@ def test_relation_returns_none_if_no_relations():
 
 
 def test_relation_returns_first_relation():
-    """relation should return the first etcd-client relation."""
+    """Relation should return the first etcd-client relation."""
     etcd_interface_state, charm = _make_etcd_interface_state()
 
     relation = MagicMock()
@@ -113,7 +113,7 @@ def test_remote_responses_returns_provider_requests():
 
 
 def test_uris_returns_none_if_no_remote_responses():
-    """uris should return None if no remote responses are available."""
+    """Uris should return None if no remote responses are available."""
     etcd_interface_state, charm = _make_etcd_interface_state()
 
     charm.etcd_interface_events.etcd_interface.relations = []
@@ -122,7 +122,7 @@ def test_uris_returns_none_if_no_remote_responses():
 
 
 def test_uris_returns_first_remote_response_uri():
-    """uris should return the URI from the first remote response."""
+    """Uris should return the URI from the first remote response."""
     etcd_interface_state, charm = _make_etcd_interface_state()
 
     relation = MagicMock()

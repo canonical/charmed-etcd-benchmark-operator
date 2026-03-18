@@ -4,7 +4,7 @@
 
 """Unit tests for TLS-related event handlers."""
 
-from unittest.mock import ANY, patch, MagicMock
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from ops import testing
@@ -56,6 +56,7 @@ def test_tls_events_init_constructs_tls_requires():
         mock_tls_requires.return_value.on.certificate_available,
         ANY,
     )
+
 
 def test_certificate_available_invokes_tls_manager():
     """certificate_available should delegate to TLSManager."""
