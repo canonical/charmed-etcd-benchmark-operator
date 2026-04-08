@@ -13,7 +13,7 @@ from platform import machine
 import jubilant
 import pytest
 from jubilant import Juju
-from pytest_jubilant import pack # type: ignore[import-not-found]
+from pytest_jubilant import pack  # type: ignore[import-not-found]
 
 JUJU_TESTING_MODEL = "testing"
 
