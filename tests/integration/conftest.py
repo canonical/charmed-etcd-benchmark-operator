@@ -48,13 +48,6 @@ def benchmark_charm(arch: str):
         )
 
 
-# TODO deploy from CharmHub once key prefix changes are merged
-@pytest.fixture
-def etcd_charm(arch: str) -> str:
-    """Path to the etcd charm file to use for testing."""
-    return f"./charmed-etcd_ubuntu@24.04-{arch}.charm"
-
-
 @pytest.fixture(scope="module")
 def juju(arch: str):
     """Provide a temp juju model, intended for use in other fixtures defined in this file."""

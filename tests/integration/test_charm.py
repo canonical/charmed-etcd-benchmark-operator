@@ -19,10 +19,10 @@ TLS_NAME = "self-signed-certificates"
 CHARMED_ETCD_BENCHMARK_OPERATOR = "charmed-etcd-benchmark-operator"
 
 
-def test_deploy(benchmark_charm: pathlib.Path, etcd_charm: pathlib.Path, juju_vm_model: Juju):
+def test_deploy(benchmark_charm: pathlib.Path, juju_vm_model: Juju):
     """Deploy the charm under test, and other charms necessary."""
     juju_vm_model.deploy(benchmark_charm.resolve(), app=CHARMED_ETCD_BENCHMARK_OPERATOR)
-    juju_vm_model.deploy(etcd_charm, app=ETCD_APP_NAME, num_units=2)
+    juju_vm_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
     juju_vm_model.deploy(TLS_NAME, channel="1/edge")
 
     # enable TLS
