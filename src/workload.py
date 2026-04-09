@@ -87,8 +87,8 @@ class EtcdBenchmarkWorkload(WorkloadBase):
 
         newline = "\n"
         logger.info(
-            f"Benchmark put command successful: {
-                put_benchmark.stdout.decode('utf-8').strip().split(newline)
-            }"
+            f"""Benchmark put command successful: {
+                put_benchmark.stdout.decode("utf-8").strip().split(newline)
+            }"""
         )
         return put_benchmark.stdout.decode("utf-8").strip().split(newline)
