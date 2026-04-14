@@ -29,8 +29,8 @@ def test_tls_events_init_constructs_tls_requires():
 
     with (
         patch("events.tls.TLSCertificatesRequiresV4") as mock_tls_requires,
-        patch("events.tls.socket.gethostname", return_value="test-host"),
-        patch("events.tls.socket.gethostbyname", return_value="10.1.2.3"),
+        patch("managers.tls.socket.gethostname", return_value="test-host"),
+        patch("managers.tls.socket.gethostbyname", return_value="10.1.2.3"),
         patch("ops.framework.Framework.observe") as mock_observe,
         patch("workload.subprocess.run") as mock_run,
     ):
@@ -66,8 +66,8 @@ def test_certificate_available_returns_if_no_assigned_certificates():
     state_in = testing.State()
 
     with (
-        patch("events.tls.socket.gethostname", return_value="test-host"),
-        patch("events.tls.socket.gethostbyname", return_value="10.1.2.3"),
+        patch("managers.tls.socket.gethostname", return_value="test-host"),
+        patch("managers.tls.socket.gethostbyname", return_value="10.1.2.3"),
         patch("workload.subprocess.run") as mock_run,
     ):
         mock_run.return_value.stdout = b"help output"
@@ -98,8 +98,8 @@ def test_certificate_available_returns_if_certificate_mismatch():
     state_in = testing.State()
 
     with (
-        patch("events.tls.socket.gethostname", return_value="test-host"),
-        patch("events.tls.socket.gethostbyname", return_value="10.1.2.3"),
+        patch("managers.tls.socket.gethostname", return_value="test-host"),
+        patch("managers.tls.socket.gethostbyname", return_value="10.1.2.3"),
         patch("workload.subprocess.run") as mock_run,
     ):
         mock_run.return_value.stdout = b"help output"
@@ -141,8 +141,8 @@ def test_certificate_available_writes_cert_and_key_and_updates_request():
     state_in = testing.State()
 
     with (
-        patch("events.tls.socket.gethostname", return_value="test-host"),
-        patch("events.tls.socket.gethostbyname", return_value="10.1.2.3"),
+        patch("managers.tls.socket.gethostname", return_value="test-host"),
+        patch("managers.tls.socket.gethostbyname", return_value="10.1.2.3"),
         patch("workload.subprocess.run") as mock_run,
     ):
         mock_run.return_value.stdout = b"help output"
@@ -188,8 +188,8 @@ def test_certificate_available_sets_blocked_status_if_write_fails():
     state_in = testing.State()
 
     with (
-        patch("events.tls.socket.gethostname", return_value="test-host"),
-        patch("events.tls.socket.gethostbyname", return_value="10.1.2.3"),
+        patch("managers.tls.socket.gethostname", return_value="test-host"),
+        patch("managers.tls.socket.gethostbyname", return_value="10.1.2.3"),
         patch("workload.subprocess.run") as mock_run,
     ):
         mock_run.return_value.stdout = b"help output"
