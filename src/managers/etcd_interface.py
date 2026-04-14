@@ -10,13 +10,9 @@ from typing import TYPE_CHECKING
 from charmlibs.interfaces.tls_certificates import Certificate
 from charms.data_platform_libs.v1.data_interfaces import (
     RequirerCommonModel,
-    ResourceCreatedEvent,
-    ResourceEndpointsChangedEvent,
-    ResourceProviderModel,
 )
 from ops import Object
 
-from literals import CA_CERT_PATH
 from utils.certificates import get_common_name_from_chain
 
 if TYPE_CHECKING:
@@ -65,25 +61,3 @@ class EtcdInterfaceManager(Object):
 
         local_model.requests = [cur_request]
         self.charm.etcd_interface_state.write_local_model(local_model)
-
-    def handle_endpoints_changed(
-        self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]
-    ) -> None:
-        """Handle etcd client relation data changed event."""
-        response = event.response
-        logger.info("Endpoints changed: %s", response.endpoints)
-        if not response.endpoints:
-            logger.error("No endpoints available")
-
-    def handle_resource_created(self, event: ResourceCreatedEvent[ResourceProviderModel]) -> None:
-        """Handle resource created event."""
-        logger.info("Resource created")
-        response = event.response
-        if not response.tls_ca:
-            logger.error("No server CA chain available")
-            return
-        if not response.username:
-            logger.error("No username available")
-            return
-
-        self.charm.workload.write_file(response.tls_ca, CA_CERT_PATH)

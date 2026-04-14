@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 
 from ops import Object
 
+from literals import CA_CERT_PATH
+
 if TYPE_CHECKING:
     from charm import CharmedEtcdBenchmarkOperatorCharm
 from charms.data_platform_libs.v1.data_interfaces import (
@@ -45,8 +47,20 @@ class EtcdInterfaceEvents(Object):
         self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]
     ) -> None:
         """Handle etcd client relation data changed event."""
-        self.charm.etcd_interface_manager.handle_endpoints_changed(event)
+        response = event.response
+        logger.info("Endpoints changed: %s", response.endpoints)
+        if not response.endpoints:
+            logger.error("No endpoints available")
 
     def _on_resource_created(self, event: ResourceCreatedEvent[ResourceProviderModel]) -> None:
         """Handle resource created event."""
-        self.charm.etcd_interface_manager.handle_resource_created(event)
+        logger.info("Resource created")
+        response = event.response
+        if not response.tls_ca:
+            logger.error("No server CA chain available")
+            return
+        if not response.username:
+            logger.error("No username available")
+            return
+
+        self.charm.workload.write_file(response.tls_ca, CA_CERT_PATH)

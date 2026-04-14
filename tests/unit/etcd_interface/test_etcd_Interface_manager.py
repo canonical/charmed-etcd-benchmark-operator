@@ -4,9 +4,8 @@
 
 """Unit tests for etcd interface related managers."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-from literals import CA_CERT_PATH
 from managers.etcd_interface import EtcdInterfaceManager
 
 
@@ -15,7 +14,6 @@ def _make_etcd_interface_manager():
     charm = MagicMock()
     charm.tls_state = MagicMock()
     charm.etcd_interface_state = MagicMock()
-    charm.workload = MagicMock()
     return EtcdInterfaceManager(charm), charm
 
 
@@ -78,16 +76,10 @@ def test_update_request_from_cert_updates_existing_request():
 
     charm.etcd_interface_state.local_model = local_model
 
-    # Make the existing request match the incoming certificate common name.
-    from managers import etcd_interface as etcd_interface_module
-
-    original = etcd_interface_module.get_common_name_from_chain
-    etcd_interface_module.get_common_name_from_chain = MagicMock(return_value="test-common-name")
-
-    try:
+    with patch(
+        "managers.etcd_interface.get_common_name_from_chain", return_value="test-common-name"
+    ):
         etcd_interface_manager.update_request_from_cert(cert)
-    finally:
-        etcd_interface_module.get_common_name_from_chain = original
 
     assert existing_request.mtls_cert == "NEW CERT DATA"
     assert local_model.requests == [existing_request]
@@ -113,54 +105,3 @@ def test_update_request_from_cert_creates_new_request_when_no_match():
     assert local_model.requests[0].resource == "/test-common-name/"
     assert local_model.requests[0].mtls_cert == "NEW CERT DATA"
     charm.etcd_interface_state.write_local_model.assert_called_once_with(local_model)
-
-
-def test_handle_endpoints_changed_logs_error_if_no_endpoints(caplog):
-    """handle_endpoints_changed should log an error if no endpoints are available."""
-    etcd_interface_manager, _ = _make_etcd_interface_manager()
-    event = MagicMock()
-    event.response.endpoints = None
-
-    with caplog.at_level("ERROR"):
-        etcd_interface_manager.handle_endpoints_changed(event)
-
-    assert "No endpoints available" in caplog.text
-
-
-def test_handle_resource_created_returns_if_no_tls_ca():
-    """handle_resource_created should return early if no CA chain is provided."""
-    etcd_interface_manager, charm = _make_etcd_interface_manager()
-    event = MagicMock()
-
-    event.response.tls_ca = None
-    event.response.username = "test-user"
-
-    etcd_interface_manager.handle_resource_created(event)
-
-    charm.workload.write_file.assert_not_called()
-
-
-def test_handle_resource_created_returns_if_no_username():
-    """handle_resource_created should return early if no username is provided."""
-    etcd_interface_manager, charm = _make_etcd_interface_manager()
-    event = MagicMock()
-
-    event.response.tls_ca = "CA DATA"
-    event.response.username = None
-
-    etcd_interface_manager.handle_resource_created(event)
-
-    charm.workload.write_file.assert_not_called()
-
-
-def test_handle_resource_created_writes_ca_file():
-    """handle_resource_created should write the CA chain to disk."""
-    etcd_interface_manager, charm = _make_etcd_interface_manager()
-    event = MagicMock()
-
-    event.response.tls_ca = "CA DATA"
-    event.response.username = "test-user"
-
-    etcd_interface_manager.handle_resource_created(event)
-
-    charm.workload.write_file.assert_called_once_with("CA DATA", CA_CERT_PATH)

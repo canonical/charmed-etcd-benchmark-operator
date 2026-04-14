@@ -155,7 +155,7 @@ requires-dist = [
     { name = "ops", specifier = ">=3,<4" },
     { name = "ops", extras = ["testing"] },
     { name = "pytest" },
-    { name = "pytest-jubilant" },
+    { name = "pytest-jubilant", specifier = "==1.3.0" },
     { name = "tenacity" },
 ]
 
@@ -170,7 +170,7 @@ charm = [
 integration = [
     { name = "jubilant" },
     { name = "pytest" },
-    { name = "pytest-jubilant" },
+    { name = "pytest-jubilant", specifier = "==1.3.0" },
     { name = "python-dateutil" },
 ]
 lint = [

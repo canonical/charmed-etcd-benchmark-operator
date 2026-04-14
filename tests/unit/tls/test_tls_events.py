@@ -6,10 +6,12 @@
 
 from unittest.mock import ANY, MagicMock, patch
 
+import ops
 import pytest
 from ops import testing
 
 from charm import CharmedEtcdBenchmarkOperatorCharm
+from literals import CLIENT_CERT_PATH, CLIENT_KEY_PATH
 
 
 @pytest.fixture(autouse=True)
@@ -58,8 +60,8 @@ def test_tls_events_init_constructs_tls_requires():
     )
 
 
-def test_certificate_available_invokes_tls_manager():
-    """certificate_available should delegate to TLSManager."""
+def test_certificate_available_returns_if_no_assigned_certificates():
+    """certificate_available should return early if no assigned certificates exist."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
     state_in = testing.State()
 
@@ -67,7 +69,38 @@ def test_certificate_available_invokes_tls_manager():
         patch("events.tls.socket.gethostname", return_value="test-host"),
         patch("events.tls.socket.gethostbyname", return_value="10.1.2.3"),
         patch("workload.subprocess.run") as mock_run,
-        patch("managers.tls.TLSManager.handle_certificate_available") as mock_handle,
+    ):
+        mock_run.return_value.stdout = b"help output"
+
+        with ctx(ctx.on.start(), state_in) as manager:
+            charm = manager.charm
+            event = MagicMock()
+            with (
+                patch.object(charm.workload, "write_file") as mock_write_file,
+                patch.object(
+                    charm.etcd_interface_manager, "update_request_from_cert"
+                ) as mock_update_request,
+                patch.object(
+                    charm.tls_events.certificates,
+                    "get_assigned_certificates",
+                    return_value=(None, None),
+                ),
+            ):
+                charm.tls_events._on_certificate_available(event)
+
+            mock_write_file.assert_not_called()
+            mock_update_request.assert_not_called()
+
+
+def test_certificate_available_returns_if_certificate_mismatch():
+    """certificate_available should ignore events for non-assigned certificates."""
+    ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
+    state_in = testing.State()
+
+    with (
+        patch("events.tls.socket.gethostname", return_value="test-host"),
+        patch("events.tls.socket.gethostbyname", return_value="10.1.2.3"),
+        patch("workload.subprocess.run") as mock_run,
     ):
         mock_run.return_value.stdout = b"help output"
 
@@ -75,6 +108,119 @@ def test_certificate_available_invokes_tls_manager():
             charm = manager.charm
             event = MagicMock()
 
-            charm.tls_events._on_certificate_available(event)
+            assigned_certificate = MagicMock(name="assigned_certificate")
+            event_certificate = MagicMock(name="event_certificate")
 
-    mock_handle.assert_called_once_with(event)
+            cert = MagicMock()
+            cert.certificate = assigned_certificate
+
+            private_key = MagicMock()
+
+            event.certificate = event_certificate
+
+            with (
+                patch.object(charm.workload, "write_file") as mock_write_file,
+                patch.object(
+                    charm.etcd_interface_manager, "update_request_from_cert"
+                ) as mock_update_request,
+                patch.object(
+                    charm.tls_events.certificates,
+                    "get_assigned_certificates",
+                    return_value=([cert], private_key),
+                ),
+            ):
+                charm.tls_events._on_certificate_available(event)
+
+            mock_write_file.assert_not_called()
+            mock_update_request.assert_not_called()
+
+
+def test_certificate_available_writes_cert_and_key_and_updates_request():
+    """certificate_available should write cert/key and update etcd request."""
+    ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
+    state_in = testing.State()
+
+    with (
+        patch("events.tls.socket.gethostname", return_value="test-host"),
+        patch("events.tls.socket.gethostbyname", return_value="10.1.2.3"),
+        patch("workload.subprocess.run") as mock_run,
+    ):
+        mock_run.return_value.stdout = b"help output"
+
+        with ctx(ctx.on.start(), state_in) as manager:
+            charm = manager.charm
+            event = MagicMock()
+
+            certificate = MagicMock()
+            certificate.raw = "CERT DATA"
+
+            cert = MagicMock()
+            cert.certificate = certificate
+
+            private_key = MagicMock()
+            private_key.raw = "KEY DATA"
+
+            event.certificate = certificate
+
+            with (
+                patch.object(charm.workload, "write_file") as mock_write_file,
+                patch.object(
+                    charm.etcd_interface_manager, "update_request_from_cert"
+                ) as mock_update_request,
+                patch.object(
+                    charm.tls_events.certificates,
+                    "get_assigned_certificates",
+                    return_value=([cert], private_key),
+                ),
+            ):
+                charm.tls_events._on_certificate_available(event)
+
+            mock_write_file.assert_any_call("CERT DATA", CLIENT_CERT_PATH)
+            mock_write_file.assert_any_call("KEY DATA", CLIENT_KEY_PATH)
+            assert mock_write_file.call_count == 2
+
+            mock_update_request.assert_called_once_with(certificate)
+
+
+def test_certificate_available_sets_blocked_status_if_write_fails():
+    """certificate_available should block the unit if writing TLS files fails."""
+    ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
+    state_in = testing.State()
+
+    with (
+        patch("events.tls.socket.gethostname", return_value="test-host"),
+        patch("events.tls.socket.gethostbyname", return_value="10.1.2.3"),
+        patch("workload.subprocess.run") as mock_run,
+    ):
+        mock_run.return_value.stdout = b"help output"
+
+        with ctx(ctx.on.start(), state_in) as manager:
+            charm = manager.charm
+            event = MagicMock()
+
+            certificate = MagicMock()
+            certificate.raw = "CERT DATA"
+
+            cert = MagicMock()
+            cert.certificate = certificate
+
+            private_key = MagicMock()
+            private_key.raw = "KEY DATA"
+
+            event.certificate = certificate
+            with (
+                patch.object(charm.workload, "write_file") as mock_write_file,
+                patch.object(
+                    charm.etcd_interface_manager, "update_request_from_cert"
+                ) as mock_update_request,
+                patch.object(
+                    charm.tls_events.certificates,
+                    "get_assigned_certificates",
+                    return_value=([cert], private_key),
+                ),
+            ):
+                mock_write_file.side_effect = OSError("disk full")
+                charm.tls_events._on_certificate_available(event)
+
+            assert charm.unit.status == ops.BlockedStatus("Error writing TLS certificates to disk")
+            mock_update_request.assert_not_called()
