@@ -7,7 +7,7 @@
 import logging
 from typing import TYPE_CHECKING
 
-from charmlibs.interfaces.tls_certificates import Certificate, PrivateKey
+from charmlibs.interfaces.tls_certificates import Certificate
 from ops import Object
 
 from literals import CLIENT_CERT_PATH
@@ -33,14 +33,6 @@ class TLSState(Object):
         cn = f"{unit}-{model_id}"
         logger.debug("Computed common_name: %s (len=%d)", cn, len(cn))
         return cn
-
-    @property
-    def assigned_certificates(self) -> tuple[list, PrivateKey] | tuple[None, None]:
-        """Return assigned certificates and private key from the TLS relation."""
-        certs, private_key = self.charm.tls_events.certificates.get_assigned_certificates()
-        if not certs or not private_key:
-            return None, None
-        return certs, private_key
 
     @property
     def stored_certificate_raw(self) -> str | None:

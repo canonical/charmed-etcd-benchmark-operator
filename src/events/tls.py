@@ -49,7 +49,7 @@ class TLSEvents(Object):
         """Handle certificate available event."""
         logger.info("Certificate available")
 
-        certs, private_key = self.charm.tls_state.assigned_certificates
+        certs, private_key = self.certificates.get_assigned_certificates()
         if not certs or not private_key:
             logger.error("No certificates available")
             return

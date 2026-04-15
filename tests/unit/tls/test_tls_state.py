@@ -21,34 +21,6 @@ def test_common_name_builds_expected_value():
     assert tls_state.common_name == "charmed-etcd-benchmark-operator0-12345678"
 
 
-def test_assigned_certificates_returns_values_when_present():
-    """assigned_certificates should return certs and key when available."""
-    charm = MagicMock()
-    certs = [MagicMock()]
-    private_key = MagicMock()
-    charm.tls_events.certificates.get_assigned_certificates.return_value = (certs, private_key)
-
-    tls_state = TLSState(charm)
-
-    result_certs, result_key = tls_state.assigned_certificates
-
-    assert result_certs == certs
-    assert result_key == private_key
-
-
-def test_assigned_certificates_returns_none_tuple_when_missing():
-    """assigned_certificates should normalize missing values to (None, None)."""
-    charm = MagicMock()
-    charm.tls_events.certificates.get_assigned_certificates.return_value = ([], None)
-
-    tls_state = TLSState(charm)
-
-    result_certs, result_key = tls_state.assigned_certificates
-
-    assert result_certs is None
-    assert result_key is None
-
-
 def test_stored_certificate_raw_reads_file_from_workload():
     """stored_certificate_raw should read the stored client certificate from disk."""
     charm = MagicMock()
