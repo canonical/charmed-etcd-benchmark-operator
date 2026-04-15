@@ -15,7 +15,6 @@ from events.etcd_benchmark import EtcdBenchmarkEvents
 from events.etcd_interface import EtcdInterfaceEvents
 from events.tls import TLSEvents
 from managers.etcd_interface import EtcdInterfaceManager
-from managers.tls import TLSManager
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,6 @@ class CharmedEtcdBenchmarkOperatorCharm(ops.CharmBase):
         self.workload = workload.EtcdBenchmarkWorkload()
 
         # --- MANAGERS ---
-        self.tls_manager = TLSManager(self)
         self.etcd_interface_manager = EtcdInterfaceManager(self)
 
         # --- STATE ---

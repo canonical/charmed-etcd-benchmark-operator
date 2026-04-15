@@ -5,11 +5,13 @@
 """Handle all TLS related events."""
 
 import logging
+import socket
 from typing import TYPE_CHECKING
 
 import ops
 from charmlibs.interfaces.tls_certificates import (
     CertificateAvailableEvent,
+    CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
 )
 from ops import Object
@@ -37,7 +39,13 @@ class TLSEvents(Object):
         self.certificates = TLSCertificatesRequiresV4(
             self.charm,
             "certificates",
-            certificate_requests=self.charm.tls_manager.client_requests,
+            certificate_requests=[
+                CertificateRequestAttributes(
+                    common_name=self.charm.tls_state.common_name,
+                    sans_ip=frozenset({socket.gethostbyname(socket.gethostname())}),
+                    sans_dns=frozenset({self.charm.unit.name, socket.gethostname()}),
+                )
+            ],
             refresh_events=[self.refresh_tls_certificates_event],
         )
 
