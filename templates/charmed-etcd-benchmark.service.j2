@@ -1,0 +1,41 @@
+[Unit]
+Description=Service for running and managing charmed-etcd.benchmark command
+Wants=network-online.target
+After=network-online.target snapd.service
+Requires=network-online.target
+
+[Service]
+Type=simple
+Restart=no
+
+# Benchmark configuration
+
+Environment=ETCD_BENCHMARK_ENDPOINTS={{ endpoints }}
+Environment=ETCD_BENCHMARK_CLIENTS={{ clients }}
+Environment=ETCD_BENCHMARK_CONNECTIONS={{ connections }}
+Environment=ETCD_BENCHMARK_RATE={{ rate }}
+Environment=ETCD_BENCHMARK_KEY_SIZE={{ key_size }}
+Environment=ETCD_BENCHMARK_KEY_SPACE_SIZE={{ key_space_size }}
+Environment=ETCD_BENCHMARK_VALUE_SIZE={{ value_size }}
+Environment=ETCD_BENCHMARK_LIMIT={{ limit }}
+Environment=ETCD_BENCHMARK_RW_RATIO={{ rw_ratio }}
+Environment=ETCD_BENCHMARK_DURATION={{ duration }}
+Environment=ETCD_BENCHMARK_TOTAL_TRANSACTIONS={{ total_transactions }}
+Environment=ETCD_BENCHMARK_REPORT_INTERVAL={{ report_interval }}
+
+Environment=ETCD_BENCHMARK_CLIENT_CERT_PATH={{ client_cert_path }}
+Environment=ETCD_BENCHMARK_CLIENT_KEY_PATH={{ client_key_path }}
+Environment=ETCD_BENCHMARK_CA_CERT_PATH={{ ca_cert_path }}
+Environment=ETCD_BENCHMARK_RESULTS_CSV_PATH={{ results_csv_path }}
+Environment=ETCD_BENCHMARK_CURRENT_TEST_ID={{ current_test_id }}
+Environment=ETCD_BENCHMARK_CURRENT_TEST_NAME={{ current_test_name }}
+
+ExecStart=/usr/local/bin/charmed-etcd-benchmark.py
+
+# On stop, signal only the runner; it will finish the current iteration
+# and exit without starting another one.
+KillMode=process
+TimeoutStopSec=60
+
+StandardOutput=journal
+StandardError=journal

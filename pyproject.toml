@@ -18,7 +18,9 @@ dependencies = [
     "jubilant",
     "pytest-jubilant==1.3.0",
     "ops[testing]",
-    "pytest"
+    "pytest",
+    "charmlibs-systemd>=1.0.0",
+    "jinja2",
 ]
 
 [dependency-groups]
@@ -83,8 +85,8 @@ lint.ignore = [
     "D409",
     "D413",
 ]
-extend-exclude = ["__pycache__", "*.egg_info"]
 lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
+extend-exclude = ["__pycache__", "*.egg_info"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

@@ -13,7 +13,7 @@ from charms.data_platform_libs.v1.data_interfaces import (
 )
 from ops import Object
 
-from utils.certificates import get_common_name_from_chain
+from utils.utils import get_common_name_from_chain
 
 if TYPE_CHECKING:
     from charm import CharmedEtcdBenchmarkOperatorCharm

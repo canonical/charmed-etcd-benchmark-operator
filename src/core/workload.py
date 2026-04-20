@@ -6,6 +6,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,4 +36,29 @@ class WorkloadBase(ABC):
         Args:
             file (str): Path to the file.
         """
+        pass
+
+    @abstractmethod
+    def file_exists(self, file_path: str) -> bool:
+        """Check if a file exists."""
+        pass
+
+    @abstractmethod
+    def start_service(self, template_dir: str, config: dict[str, Any]) -> None:
+        """Start the workload service."""
+        pass
+
+    @abstractmethod
+    def stop_service(self) -> None:
+        """Stop the workload service."""
+        pass
+
+    @abstractmethod
+    def list_tests(self, tests_dir: str) -> list[tuple[str, str]]:
+        """Return available benchmark result directory names and status, newest first."""
+        pass
+
+    @abstractmethod
+    def prepare_and_write_summary(self, results_csv_path: str) -> str:
+        """Prepare summary from CSV results, write to summary.json and return the serialized summary."""
         pass

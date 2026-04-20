@@ -6,7 +6,7 @@
 
 from unittest.mock import patch
 
-from utils.certificates import get_common_name_from_chain
+from utils.utils import get_common_name_from_chain
 
 
 def test_get_common_name_from_chain_uses_first_certificate_only():
