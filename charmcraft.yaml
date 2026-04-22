@@ -1,0 +1,66 @@
+# This file configures Charmcraft.
+# See https://documentation.ubuntu.com/charmcraft/stable/reference/files/charmcraft-yaml-file/
+type: charm
+name: charmed-etcd-benchmark-operator
+title: Charm for etcd benchmarking tool
+summary: A charm of the etcd benchmark tool, to be used to carry out performance benchmarking of charmed-etcd
+description: |
+  This is a performance benchmarking charm for etcd.
+
+  It packages the benchmark tool from upstream etcd as a charm, and integrates with charmed-etcd over the etcd_client interface. 
+  It offers a run action to the user, which drives traffic to the etcd server and collects performance metrics. Various configs are made
+  available in the charm to tune the requests per second, number of connections, etc.
+
+platforms:
+  ubuntu@24.04:amd64:
+  ubuntu@24.04:arm64:
+
+parts:
+  charm:
+    plugin: uv
+    source: .
+    build-snaps:
+      - astral-uv
+
+
+actions:
+# TODO: implement remaining actions, in line with DP's other benchmarking operators
+# prepare:
+#    description: |
+#      Prepares the workload.
+#
+  run:
+    description: |
+      Kickstart the benchmark service.
+#
+#  stop:
+#    description: |
+#      Stops the benchmark service.
+#
+#  get-summary:
+#    description: |
+#      Allow for the test result to be obtained in cases when COS or Upload are not needed.
+#      The benchmark result collection happens anyways and is be stored in a folder within the unit.
+#      It reports in the output (either table or json) where the user can find the collection tarball
+#      in its own filesystem in addition to basic test results
+#      (e.g. time elapsed, queries executed, queries per second, etc).
+#    parameters:
+#      output:
+#        description: |
+#          The output format of the summary. It can be either a table or a json.
+#        type: string
+#        enum: [ table, json ]
+#
+#  cleanup:
+#    description: |
+#      Cleans up the workload from the application and unsets all the prepared configuration.
+#
+#
+config:
+  options:
+
+requires:
+  etcd-client:
+    interface: etcd_client
+  certificates:
+    interface: tls-certificates

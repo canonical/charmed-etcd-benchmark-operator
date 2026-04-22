@@ -1,0 +1,100 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  workflow_call:
+
+jobs:
+  lint:
+    name: Lint
+    uses: canonical/data-platform-workflows/.github/workflows/lint.yaml@v32.1.0
+
+  unit-test:
+    name: Unit test charm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+      - name: Set up tox and tox-uv
+        run: uv tool install tox --with tox-uv
+      - name: Run tests
+        run: tox run -e unit
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v4
+
+  lib-check:
+    name: Check libraries
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          # Workaround for https://github.com/canonical/charmcraft/issues/1389#issuecomment-1880921728
+          touch requirements.txt
+      - name: Check libs
+        uses: canonical/charming-actions/check-libraries@2.7.0
+        continue-on-error: true
+        with:
+          credentials: ${{ secrets.CHARMHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          use-labels: false
+          fail-build: ${{ github.event_name == 'pull_request' }}
+
+# TODO Temporarily skipping the build_charm workflow because of https://github.com/canonical/charmcraft/issues/2461
+# Charm will instead be build in a jubilant fixture
+#  build:
+#    name: Build charm
+#    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v32.1.0
+#    steps:
+#      - Build the charm
+
+  integration-test:
+    env:
+      JUJU_TESTING_MODEL: testing
+    name: Integration test charm
+    runs-on: ubuntu-22.04
+    needs:
+      - lint
+#      - unit-test
+#      - build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup lxd controller
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: lxd
+          juju-channel: "3.6/stable"
+          charmcraft-channel: "2.x/stable"
+      - name: Upgrade charmcraft
+        run: |
+          sudo snap refresh charmcraft --channel=latest/stable
+          charmcraft version
+      - name: Add juju model for testing
+        run:
+          juju add-model ${{ env.JUJU_TESTING_MODEL }}
+      - name: Run integration tests
+        run:
+          tox run -e integration
+      - name: Print debug-log
+        if: failure()
+        run: juju switch ${{ env.JUJU_TESTING_MODEL }}; juju debug-log --replay --no-tail
+      - name: Dump logs
+        uses: canonical/charm-logdump-action@main
+        if: failure()
+        with:
+          app: charmed-etcd-benchmark-operator
+          model: ${{ env.JUJU_TESTING_MODEL }}
