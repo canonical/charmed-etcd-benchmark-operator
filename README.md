@@ -70,13 +70,21 @@ until it is stopped with the `stop` action.
 juju run charmed-etcd-benchmark-operator/leader stop
 ```
 
-9. Alternatively, the `duration` config option can be set to a non-zero value for the charm, 
-which will specify the seconds for which the benchmark should run, before it is automatically stopped. 
+9. Alternatively, there are two ways to bound the benchmark run: setting the `duration` (in seconds), or `total-transaction` configs. The test will terminate accordingly.
+Note that only one of these config options can be set to a non-zero value.
 ```bash
-juju config charmed-etcd-benchmark-operator duration=600
+juju config charmed-etcd-benchmark-operator duration=1200
+
+juju config charmed-etcd-benchmark-operator total-transactions=100000
 ```
 
-10. For a full list of config options, their implications and defaults, you can run the juju config command.
+10. Another option of note is `report-interval`, which determines how often (in seconds) the benchmark results are logged. 
+By default, it is set to 10 seconds.
+```bash
+juju config charmed-etcd-benchmark-operator report-interval=30
+````
+
+11. For a full list of config options, their implications and defaults, you can run the juju config command.
 A few examples are `test-name`, `rate`, `rw-ratio`, etc. which allow for further customization of the benchmark tests. 
 
 ```bash
@@ -85,18 +93,18 @@ juju config charmed-etcd-benchmark-operator
 juju config charmed-etcd-benchmark-operator test-name="my-etcd-benchmark" rate=200 rw-ratio=2
 ```
 
-11. At any point in time, the tests—in progress or completed—can be viewed using the `list-tests` action. 
+12. At any point in time, the tests—in progress or completed—can be viewed using the `list-tests` action. 
 This action will list all test-ids of the tests that have been initiated, along with their status (in-progress or finished).
 ```bash
 juju run charmed-etcd-benchmark-operator/leader list-tests
 ```
 
-12. To view the summary of a test, the `get-summary` action can be used with the test-id as a param.
+13. To view the summary of a test, the `get-summary` action can be used with the test-id as a param.
 ```bash
 juju run charmed-etcd-benchmark-operator/leader get-summary --string-args test-id=<test-id>
 ```
 
-13. Details are also logged to the juju log, and can be viewed using the following command:
+14. Details are also logged to the juju log, and can be viewed using the following command:
 ```bash
 juju debug-log --replay
 ```

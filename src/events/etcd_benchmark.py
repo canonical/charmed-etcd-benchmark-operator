@@ -5,6 +5,7 @@
 """Handle etcd benchmark tool related events."""
 
 import logging
+import os
 import shutil
 from pathlib import Path
 from subprocess import CalledProcessError
@@ -14,9 +15,9 @@ import ops
 from charmlibs import snap
 from ops import Object
 
+from common.exceptions import BenchmarkConfigurationError
 from literals import (
     BENCHMARK_TESTS_ROOT_DIR,
-    RESULTS_CSV_FILE_NAME,
     RUNNER_FILE_NAME,
     RUNNER_FILE_PATH,
 )
@@ -77,41 +78,65 @@ class EtcdBenchmarkEvents(Object):
 
         self.charm.unit.status = ops.ActiveStatus()
 
-    def _on_run_action(self, event: ops.ActionEvent):
+    def _on_run_action(self, event: ops.ActionEvent) -> None:
         """Handle run action event."""
         # Verify that it's not already running, and that etcd uris available.
 
         if self.charm.workload.is_running():
-            error_str = (
+            event.set_results({"error": "A benchmark is already in progress"})
+            detailed_error_str = (
                 "There is already a benchmark in progress. "
                 "Please stop the active benchmark before starting a new one."
             )
-            event.set_results({"error": error_str})
-            event.fail(error_str)
+            event.fail(detailed_error_str)
+            logger.error(detailed_error_str)
             return
 
         if (
             not self.charm.etcd_interface_state.relation
             or not self.charm.etcd_interface_state.uris
         ):
-            error_str = (
+            event.set_results({"error": "etcd relation missing"})
+            detailed_error_str = (
                 "The etcd relation is needed in order to run this action. "
                 "Please relate to an etcd charm and try again."
             )
-            event.set_results({"error": error_str})
-            event.fail(error_str)
+            event.fail(detailed_error_str)
+            logger.error(detailed_error_str)
             return
 
-        self.charm.etcd_benchmark_manager.initiate_run(event)
+        # setup test folder, metadata and results files, and then kick off the run
+        try:
+            config = self.charm.etcd_benchmark_manager.setup_test()
 
-    def _on_stop_action(self, event: ops.ActionEvent):
+            self.charm.workload.start_service(
+                f"{os.environ.get('CHARM_DIR', '')}/templates", config
+            )
+
+            event.set_results(
+                {
+                    "results": (
+                        "Benchmark started successfully.\n"
+                        "If duration or total-transactions config options have been set, "
+                        "test will auto terminate accordingly. "
+                        "Alternatively, the `stop` action can be used."
+                    )
+                }
+            )
+
+        except BenchmarkConfigurationError as e:
+            event.set_results({"error": e.message})
+            event.fail(e.detailed_description)
+
+    def _on_stop_action(self, event: ops.ActionEvent) -> None:
         """Handle stop action event."""
         if not self.charm.workload.is_running():
-            error_str = (
+            event.set_results({"error": "no active benchmark to stop"})
+            detailed_error_str = (
                 "There is no active benchmark to stop. Use the 'run' action to start a benchmark."
             )
-            event.set_results({"error": error_str})
-            event.fail(error_str)
+            event.fail(detailed_error_str)
+            logger.error(detailed_error_str)
             return
 
         self.charm.workload.stop_service()
@@ -126,38 +151,37 @@ class EtcdBenchmarkEvents(Object):
             }
         )
 
-    def _on_list_tests_action(self, event: ops.ActionEvent):
+    def _on_list_tests_action(self, event: ops.ActionEvent) -> None:
         """Handle list-tests action event."""
-        tests = self.charm.workload.list_tests(BENCHMARK_TESTS_ROOT_DIR)
-
-        if not tests:
+        if not (tests := self.charm.etcd_benchmark_manager.list_tests(BENCHMARK_TESTS_ROOT_DIR)):
             event.set_results({"tests": "No tests found."})
             return
 
         formatted = [f"{test_id} ({status})" for test_id, status in tests]
         event.set_results({"tests": "\n".join(formatted)})
 
-    def _on_get_summary_action(self, event: ops.ActionEvent):
+    def _on_get_summary_action(self, event: ops.ActionEvent) -> None:
         """Handle get-summary action event."""
-        test_id = str(event.params.get("test-id", ""))
-        if not test_id:
-            event.set_results({"error": "Please provide a valid, non-empty test-id parameter."})
-            event.fail("Please provide a valid, non-empty test-id parameter.")
+        if not (test_id := str(event.params.get("test-id", ""))):
+            event.set_results({"error": "valid test-id not found"})
+            detailed_error_str = "Please provide a valid, non-empty test-id parameter."
+            event.fail(detailed_error_str)
+            logger.error(detailed_error_str)
             return
         test_folder = f"{BENCHMARK_TESTS_ROOT_DIR}/{test_id}"
         if not self.charm.workload.file_exists(test_folder):
-            event.set_results({"error": f"{test_folder} does not exist."})
-            event.fail(f"{test_folder} does not exist.")
+            detailed_error_str = f"{test_folder} does not exist."
+            event.set_results({"error": detailed_error_str})
+            event.fail(detailed_error_str)
+            logger.error(detailed_error_str)
             return
 
         error_str = "Error preparing/writing summary"
 
         try:
-            summary = self.charm.workload.prepare_and_write_summary(
-                f"{test_folder}/{RESULTS_CSV_FILE_NAME}"
-            )
+            summary = self.charm.etcd_benchmark_manager.get_test_summary(test_folder)
             event.set_results({"results": summary})
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, KeyError) as e:
             logger.error(f"{error_str}: {e}")
             event.set_results({"error": f"{error_str}: {e}"})
             event.fail(f"{error_str}: {e}")

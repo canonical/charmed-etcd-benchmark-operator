@@ -67,8 +67,7 @@ class EtcdInterfaceState(Object):
     @property
     def uris(self) -> str | None:
         """Return etcd URIs from remote responses."""
-        remote_responses = self.remote_responses
-        if not remote_responses:
+        if not (remote_responses := self.remote_responses):
             return None
         return remote_responses[0].uris
 

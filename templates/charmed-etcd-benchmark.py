@@ -207,7 +207,7 @@ def _append_csv_rows(
         writer.writerows(rows)
 
 
-def _set_test_inactive(results_csv_path: str) -> None:
+def _mark_test_complete(results_csv_path: str) -> None:
     """Update metadata.json with is_active=false on runner exit."""
     if not results_csv_path:
         return
@@ -377,23 +377,59 @@ def _parse_final_benchmark_output(raw_output: str) -> BenchmarkResults:
 def _summary_operation_dict(result: BenchmarkOperationResult) -> dict[str, int | float]:
     """Return JSON-serializable summary fields for one operation type."""
     return {
-        "ops": result.total_ops,
-        "rps": result.throughput_rps,
-        "avg": result.average_latency_sec,
-        "stddev": result.stddev_latency_sec,
-        "p50": result.p50_latency_sec,
-        "p90": result.p90_latency_sec,
-        "p99": result.p99_latency_sec,
+        "total_ops": result.total_ops,
+        "throughput_rps": result.throughput_rps,
+        "average_latency_sec": result.average_latency_sec,
+        "stddev_latency_sec": result.stddev_latency_sec,
+        "p50_latency_sec": result.p50_latency_sec,
+        "p90_latency_sec": result.p90_latency_sec,
+        "p99_latency_sec": result.p99_latency_sec,
     }
 
 
 def _persist_final_summary(results_csv_path: str, summary: BenchmarkResults) -> None:
-    """Write (or rewrite) summary.json with final benchmark summary stats."""
+    """Write (rewrite, if previously generated) summary.json with final benchmark summary stats."""
     summary_path = Path(results_csv_path).parent / "summary.json"
-    payload = {
-        "read": _summary_operation_dict(summary.read),
-        "write": _summary_operation_dict(summary.write),
+    metadata_path = Path(results_csv_path).parent / "metadata.json"
+
+    read_summary = _summary_operation_dict(summary.read)
+    write_summary = _summary_operation_dict(summary.write)
+    payload : dict[str, object] = {
+        "operations": {
+            "read": read_summary,
+            "write": write_summary,
+        },
+        "test_id": None,
+        "test_name": None,
+        "started_at": None,
+        "test_config": {},
+        "is_finalized": True,
     }
+
+    # Include test metadata when available; still persist summary if metadata is absent.
+    metadata: dict[str, object] = {}
+    if not metadata_path.exists():
+        logger.warning("metadata.json not found at %s; writing summary without metadata", metadata_path)
+    else:
+        try:
+            with metadata_path.open("r", encoding="utf-8") as f:
+                raw_metadata = json.load(f)
+            if isinstance(raw_metadata, dict):
+                metadata = raw_metadata
+            else:
+                logger.error(
+                    "metadata.json does not contain a JSON object: %s; writing summary without metadata",
+                    metadata_path,
+                )
+        except json.JSONDecodeError:
+            logger.exception("metadata.json is not valid JSON: %s", metadata_path)
+        except OSError:
+            logger.exception("Failed to read metadata.json: %s", metadata_path)
+
+    payload["test_id"] = metadata.get("test_id")
+    payload["test_name"] = metadata.get("test_name")
+    payload["started_at"] = metadata.get("started_at")
+    payload["test_config"] = metadata.get("test_config", {})
 
     try:
         with summary_path.open("w", encoding="utf-8") as f:
@@ -449,7 +485,7 @@ def _clear_benchmark_data() -> None:
 
 
 def main() -> int:
-    """Main service loop."""
+    """Main service."""
     signal.signal(signal.SIGTERM, _handle_exit)
     signal.signal(signal.SIGINT, _handle_exit)
 
@@ -468,9 +504,9 @@ def main() -> int:
     def _terminate_benchmark_process(p: subprocess.Popen, *, timeout_seconds: int = 5) -> None:
         """Terminate process and escalate to kill if it does not exit in time."""
         if p.poll() is not None:
-            logger.info("CHECKPOINT 3")
             return  # already exited
 
+        # terminate gracefully. If timed out, kill.
         os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         try:
             p.wait(timeout=timeout_seconds)
@@ -478,7 +514,6 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             logger.warning("Process did not terminate in time; killing (pid=%s)", p.pid)
 
-        logger.info("CHECKPOINT 4")
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
         try:
             p.wait(timeout=5)
@@ -487,7 +522,7 @@ def main() -> int:
 
     def _finalize_exit(exit_code: int) -> int:
         _clear_benchmark_data()
-        _set_test_inactive(results_csv_path)
+        _mark_test_complete(results_csv_path)
         return exit_code
 
     if not results_csv_path:
@@ -504,8 +539,6 @@ def main() -> int:
         nonlocal sample_number
         raw_line = line if line.endswith("\n") else f"{line}\n"
         line = line.rstrip("\n")
-
-        logger.info(f"CHECKPOINT 5: {line}")
 
         try:
             parsed_result = _parse_intermediate_json_result(line)
@@ -569,15 +602,8 @@ def main() -> int:
     try:
         while True:
             if not stop_requested:
-                if not keep_running:
+                if not keep_running or _duration_expired(start_time, duration):
                     logger.info("Termination requested; waiting for benchmark to exit")
-                    logger.info("CHECKPOINT 1")
-                    _terminate_benchmark_process(proc, timeout_seconds=20)
-                    stop_requested = True
-                    stop_request_monotonic = time.monotonic()
-                elif _duration_expired(start_time, duration):
-                    logger.info("Duration exceeded; forwarding SIGTERM to benchmark")
-                    logger.info("CHECKPOINT 2")
                     _terminate_benchmark_process(proc, timeout_seconds=20)
                     stop_requested = True
                     stop_request_monotonic = time.monotonic()
@@ -590,9 +616,8 @@ def main() -> int:
                     return _finalize_exit(1)
 
             if proc.poll() is not None:
-                # Process has exited; drain any remaining stdout before breaking
+                # Process has exited; drain remaining stdout (for final summary) before breaking
                 remaining_in_loop = proc.stdout.read()
-                logger.info(f"Line 589: {remaining_in_loop}")
                 if remaining_in_loop:
                     for line in remaining_in_loop.splitlines(keepends=True):
                         _process_output_line(line)
@@ -615,18 +640,15 @@ def main() -> int:
 
     # Drain remaining stdout/stderr after process exits.
     try:
-        remaining_stdout, stderr = proc.communicate(timeout=5)
+        remaining_stdout, _ = proc.communicate(timeout=5)
     except subprocess.TimeoutExpired:
         logger.warning("Timeout while collecting process output; forcing termination")
         _terminate_benchmark_process(proc)
-        remaining_stdout, stderr = proc.communicate()
+        remaining_stdout, _ = proc.communicate()
 
     for line in remaining_stdout.splitlines(keepends=True):
         if not _process_output_line(line):
             return _finalize_exit(1)
-
-    if stderr:
-        logger.info("Benchmark stderr:\n%s", stderr)
 
     # gather the collected final summary lines and parse to obtain final summary.json
     raw_summary_output = "".join(summary_output_parts)
@@ -646,7 +668,6 @@ def main() -> int:
     if rc != 0 and rc != -15:  # -15 is SIGTERM
         logger.error("Benchmark exited unexpectedly with return code %s", rc)
         return _finalize_exit(rc)
-
 
     logger.info("Benchmark runner exiting cleanly...")
     return _finalize_exit(0)

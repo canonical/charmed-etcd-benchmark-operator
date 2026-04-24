@@ -54,11 +54,6 @@ class WorkloadBase(ABC):
         pass
 
     @abstractmethod
-    def list_tests(self, tests_dir: str) -> list[tuple[str, str]]:
-        """Return available benchmark result directory names and status, newest first."""
-        pass
-
-    @abstractmethod
-    def prepare_and_write_summary(self, results_csv_path: str) -> str:
-        """Prepare summary from CSV results, write to summary.json and return the serialized summary."""
+    def is_running(self) -> bool:
+        """Return whether the benchmark service is active."""
         pass

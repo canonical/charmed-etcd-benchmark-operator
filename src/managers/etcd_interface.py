@@ -43,8 +43,7 @@ class EtcdInterfaceManager(Object):
 
     def update_request_from_cert(self, cert: Certificate) -> None:
         """Update the requests in the relation data bag from the assigned certificates."""
-        local_model = self.charm.etcd_interface_state.local_model
-        if not local_model:
+        if not (local_model := self.charm.etcd_interface_state.local_model):
             return
 
         request_common_names = {
