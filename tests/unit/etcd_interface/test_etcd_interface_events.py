@@ -134,4 +134,4 @@ def test_resource_created_event_writes_ca_file():
             with patch.object(charm.workload, "write_file") as mock_write_file:
                 charm.etcd_interface_events._on_resource_created(event)
 
-                mock_write_file.assert_called_once_with("CA DATA", CA_CERT_PATH)
+                mock_write_file.assert_called_once_with(content="CA DATA", file=CA_CERT_PATH)

@@ -21,6 +21,7 @@ dependencies = [
     "pytest",
     "charmlibs-systemd>=1.0.0",
     "jinja2",
+    "prometheus-client"
 ]
 
 [dependency-groups]
@@ -30,12 +31,15 @@ charm = [
     "charmlibs-snap",
     "data-platform-helpers",
     "tenacity",
+    "prometheus-client"
 ]
 # Dependencies of linting and static type checks
 lint = [
     "ruff",
     "codespell",
     "pyright",
+    "jinja2",
+    "charmlibs-systemd>=1.0.0",
     {include-group = "charm"},
 ]
 # Dependencies of unit tests
@@ -43,6 +47,8 @@ unit = [
     "coverage[toml]",
     "ops[testing]",
     "pytest",
+    "jinja2",
+    "charmlibs-systemd>=1.0.0",
     {include-group = "charm"},
 ]
 # Dependencies of integration tests

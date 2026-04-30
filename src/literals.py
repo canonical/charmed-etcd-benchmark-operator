@@ -12,9 +12,9 @@ CLIENT_CERT_PATH = f"{TLS_ROOT_DIR}/client.pem"
 CLIENT_KEY_PATH = f"{TLS_ROOT_DIR}/client.key"
 CA_CERT_PATH = f"{TLS_ROOT_DIR}/ca.pem"
 
-BENCHMARK_ROOT_DIR = "/var/lib/charmed-etcd-benchmark-operator"
+BENCHMARK_ROOT_DIR = "/var/snap/charmed-etcd/current/benchmark"
 BENCHMARK_TESTS_ROOT_DIR = f"{BENCHMARK_ROOT_DIR}/tests"
-RESULTS_CSV_FILE_NAME = "results.csv"
+TEST_RESULTS_DIR_NAME = "results"
 METADATA_JSON_FILE_NAME = "metadata.json"
 SUMMARY_JSON_FILE_NAME = "summary.json"
 
@@ -33,8 +33,15 @@ RESULT_CSV_HEADERS = [
     "p99_latency_sec",
 ]
 
-SERVICE_NAME = "charmed-etcd-benchmark"
-SERVICE_FILE_PATH = f"/etc/systemd/system/{SERVICE_NAME}.service"
-TEMPLATE_FILE_NAME = "charmed-etcd-benchmark.service.j2"
-RUNNER_FILE_NAME = "charmed-etcd-benchmark.py"
-RUNNER_FILE_PATH = f"/usr/local/bin/{RUNNER_FILE_NAME}"
+BENCHMARK_SERVICE_NAME = "charmed-etcd-benchmark"
+BENCHMARK_SERVICE_FILE_PATH = f"/etc/systemd/system/{BENCHMARK_SERVICE_NAME}.service"
+BENCHMARK_TEMPLATE_FILE_NAME = "charmed-etcd-benchmark.service.j2"
+BENCHMARK_RUNNER_FILE_NAME = "charmed_etcd_benchmark.py"
+BENCHMARK_RUNNER_FILE_PATH = f"/usr/local/bin/{BENCHMARK_RUNNER_FILE_NAME}"
+
+METRICS_EXPORTER_SERVICE_NAME = "benchmark-metrics-exporter"
+METRICS_EXPORTER_SERVICE_FILE_PATH = f"/etc/systemd/system/{METRICS_EXPORTER_SERVICE_NAME}.service"
+METRICS_EXPORTER_TEMPLATE_FILE_NAME = "benchmark-metrics-exporter.service.j2"
+METRICS_EXPORTER_RUNNER_FILE_NAME = "benchmark_metrics_exporter.py"
+METRICS_EXPORTER_RUNNER_FILE_PATH = f"/usr/local/bin/{METRICS_EXPORTER_RUNNER_FILE_NAME}"
+METRICS_PORT = "9100"

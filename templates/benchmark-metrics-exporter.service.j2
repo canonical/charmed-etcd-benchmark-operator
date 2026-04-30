@@ -1,0 +1,16 @@
+[Unit]
+Description=Benchmark Metrics Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+Restart=no
+
+Environment=ETCD_BENCHMARK_JSONL_PATH={{ jsonl_path }}
+Environment=ETCD_BENCHMARK_METRICS_PORT={{ metrics_port }}
+
+ExecStart={{ python_bin }} {{ runner_path }}
+
+StandardOutput=journal
+StandardError=journal

@@ -20,7 +20,7 @@ class ConfigManager(Object):
         self.charm = charm
 
     def get_charm_config(self) -> dict[str, Any]:
-        """Render the systemd service file from current charm config."""
+        """Read current charm config."""
         config = self.charm.config
 
         return {

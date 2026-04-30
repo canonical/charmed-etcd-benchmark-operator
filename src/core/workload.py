@@ -6,6 +6,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ class WorkloadBase(ABC):
         pass
 
     @abstractmethod
-    def write_file(self, content: str, file: str) -> None:
+    def write_file(self, file: str, content: str | None = None) -> None:
         """Write content to a file.
 
         Args:
@@ -39,7 +40,7 @@ class WorkloadBase(ABC):
         pass
 
     @abstractmethod
-    def file_exists(self, file_path: str) -> bool:
+    def file_exists(self, file_path: str | Path) -> bool:
         """Check if a file exists."""
         pass
 

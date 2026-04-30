@@ -13,39 +13,26 @@ from pathlib import Path
 from typing import Any
 
 from charmlibs import snap, systemd
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from tenacity import Retrying, retry, stop_after_attempt, wait_fixed
 from typing_extensions import override
 
 from core.workload import WorkloadBase
 from literals import (
-    SERVICE_FILE_PATH,
-    SERVICE_NAME,
+    BENCHMARK_SERVICE_FILE_PATH,
+    BENCHMARK_SERVICE_NAME,
+    BENCHMARK_TEMPLATE_FILE_NAME,
     SNAP_CHANNEL,
     SNAP_NAME,
-    TEMPLATE_FILE_NAME,
 )
+from utils.utils import render_template
 
 logger = logging.getLogger(__name__)
 
 
-def _render_template(templates_dir: str, context: dict[str, Any]) -> str:
-    """Render a Jinja2 template from the charm templates directory."""
-    env = Environment(
-        loader=FileSystemLoader(str(templates_dir)),
-        undefined=StrictUndefined,
-        autoescape=False,
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    template = env.get_template(TEMPLATE_FILE_NAME)
-    return template.render(**context)
-
-
 def _render_service(templates_dir: str, config: dict[str, Any]) -> None:
     """Render the systemd service file from current charm config."""
-    rendered = _render_template(templates_dir, config)
-    Path(SERVICE_FILE_PATH).write_text(rendered)
+    rendered = render_template(Path(f"{templates_dir}/{BENCHMARK_TEMPLATE_FILE_NAME}"), config)
+    Path(BENCHMARK_SERVICE_FILE_PATH).write_text(rendered)
     systemd.daemon_reload()
 
 
@@ -83,11 +70,12 @@ class EtcdBenchmarkWorkload(WorkloadBase):
         logger.debug(f"Benchmark health check successful: {help_text.stdout}")
 
     @override
-    def write_file(self, content: str, file: str) -> None:
+    def write_file(self, file: str, content: str | None = None) -> None:
         """Write a file at provided path."""
         path = Path(file)
         path.parent.mkdir(exist_ok=True, parents=True)
-        path.write_text(content)
+        # Ensure the file is created even when no payload is provided.
+        path.write_text(content or "")
 
     @override
     def read_file(self, file: str) -> str | None:
@@ -98,7 +86,7 @@ class EtcdBenchmarkWorkload(WorkloadBase):
         return path.read_text()
 
     @override
-    def file_exists(self, file_path: str) -> bool:
+    def file_exists(self, file_path: str | Path) -> bool:
         """Check if a directory exists."""
         return Path(file_path).exists()
 
@@ -107,12 +95,11 @@ class EtcdBenchmarkWorkload(WorkloadBase):
         """Start the benchmark service."""
         _render_service(template_dir, config)
         try:
-            systemd.service_enable(SERVICE_NAME)
-        except systemd.SystemdError:
-            # harmless if already enabled
-            logger.debug("Service already enabled or could not enable cleanly")
-
-        systemd.service_restart(SERVICE_NAME)
+            systemd.service_enable(BENCHMARK_SERVICE_NAME)
+            systemd.service_start(BENCHMARK_SERVICE_NAME)
+        except systemd.SystemdError as e:
+            logger.error("Benchmark service could not be started cleanly")
+            raise e
 
     @override
     def stop_service(self) -> None:
@@ -120,12 +107,17 @@ class EtcdBenchmarkWorkload(WorkloadBase):
         if not self.is_running():
             logger.info("Benchmark service is not running")
             return
-        systemd.service_stop(SERVICE_NAME)
+        try:
+            systemd.service_stop(BENCHMARK_SERVICE_NAME)
+            systemd.service_disable(BENCHMARK_SERVICE_NAME)
+        except systemd.SystemdError as e:
+            logger.error("Benchmark service could not be stopped cleanly")
+            raise e
 
     @override
     def is_running(self) -> bool:
         """Return whether the benchmark service is active."""
         try:
-            return systemd.service_running(SERVICE_NAME)
+            return systemd.service_running(BENCHMARK_SERVICE_NAME)
         except systemd.SystemdError:
             return False

@@ -175,8 +175,8 @@ def test_certificate_available_writes_cert_and_key_and_updates_request():
             ):
                 charm.tls_events._on_certificate_available(event)
 
-            mock_write_file.assert_any_call("CERT DATA", CLIENT_CERT_PATH)
-            mock_write_file.assert_any_call("KEY DATA", CLIENT_KEY_PATH)
+            mock_write_file.assert_any_call(content="CERT DATA", file=CLIENT_CERT_PATH)
+            mock_write_file.assert_any_call(content="KEY DATA", file=CLIENT_KEY_PATH)
             assert mock_write_file.call_count == 2
 
             mock_update_request.assert_called_once_with(certificate)

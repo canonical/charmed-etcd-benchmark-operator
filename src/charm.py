@@ -17,6 +17,7 @@ from events.tls import TLSEvents
 from managers.config import ConfigManager
 from managers.etcd_benchmark import EtcdBenchmarkManager
 from managers.etcd_interface import EtcdInterfaceManager
+from managers.metrics_exporter import MetricsExporterManager
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class CharmedEtcdBenchmarkOperatorCharm(ops.CharmBase):
         self.etcd_benchmark_manager = EtcdBenchmarkManager(self)
         self.etcd_interface_manager = EtcdInterfaceManager(self)
         self.config_manager = ConfigManager(self)
+        self.metrics_exporter_manager = MetricsExporterManager()
 
         # --- STATE ---
         self.etcd_interface_state = EtcdInterfaceState(self)

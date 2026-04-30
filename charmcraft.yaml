@@ -52,7 +52,7 @@ actions:
   get-summary:
     description: |
       Retrieve human-friendly summary of the results of a test, in json format.
-    parameters:
+    params:
       test-id:
         description: |
           The ID of the test whose summary is needed. Available tests can be viewed using the list-tests action.
@@ -99,7 +99,7 @@ config:
       type: int
       description: |
         Duration of the test in seconds, at the end of which it must auto terminate. |
-        Only ONE of either `duration` or `total-transactions` config can be set. |
+        In case both are set, the test will terminate as per whichever condition is met sooner. |
         If both are unset (default=0), the test goes on indefinitely until the `stop` action is run. |
         Note that you can still use the `stop` action to terminate the test gracefully, ahead of time.
     total-transactions:
@@ -107,9 +107,9 @@ config:
       type: int
       description: |
         Total transactions to be run as part of a benchmark run, at the end of which test must auto terminate. |
-        Only ONE of either `duration` or `total-transactions` config can be set. |
+        In case both are set, the test will terminate as per whichever condition is met sooner. |
         If both are unset (default=0), the test goes on indefinitely until the `stop` action is run. |
-                Note that you can still use the `stop` action to terminate the test gracefully, ahead of time.
+        Note that you can still use the `stop` action to terminate the test gracefully, ahead of time.
     rate:
       default: 0
       type: int

@@ -12,14 +12,16 @@ from subprocess import CalledProcessError
 from typing import TYPE_CHECKING
 
 import ops
-from charmlibs import snap
+from charmlibs import snap, systemd
 from ops import Object
 
 from common.exceptions import BenchmarkConfigurationError
 from literals import (
+    BENCHMARK_RUNNER_FILE_NAME,
+    BENCHMARK_RUNNER_FILE_PATH,
     BENCHMARK_TESTS_ROOT_DIR,
-    RUNNER_FILE_NAME,
-    RUNNER_FILE_PATH,
+    METRICS_EXPORTER_RUNNER_FILE_NAME,
+    METRICS_EXPORTER_RUNNER_FILE_PATH,
 )
 
 if TYPE_CHECKING:
@@ -50,10 +52,16 @@ class EtcdBenchmarkEvents(Object):
 
         try:
             self.charm.workload.install()
-            shutil.copyfile(
-                f"{self.charm.charm_dir}/templates/{RUNNER_FILE_NAME}", RUNNER_FILE_PATH
+            runner_files = (
+                (BENCHMARK_RUNNER_FILE_NAME, BENCHMARK_RUNNER_FILE_PATH),
+                (METRICS_EXPORTER_RUNNER_FILE_NAME, METRICS_EXPORTER_RUNNER_FILE_PATH),
             )
-            Path(RUNNER_FILE_PATH).chmod(0o755)
+            for runner_file_name, runner_file_path in runner_files:
+                shutil.copyfile(
+                    f"{self.charm.charm_dir}/templates/{runner_file_name}",
+                    runner_file_path,
+                )
+                Path(runner_file_path).chmod(0o755)
         except snap.SnapError as e:
             logger.error(f"Error installing workload: {e.message}")
             self.charm.unit.status = ops.BlockedStatus("Error installing the workload")
@@ -109,6 +117,8 @@ class EtcdBenchmarkEvents(Object):
         try:
             config = self.charm.etcd_benchmark_manager.setup_test()
 
+            self.charm.metrics_exporter_manager.start_metrics_exporter(config)
+
             self.charm.workload.start_service(
                 f"{os.environ.get('CHARM_DIR', '')}/templates", config
             )
@@ -127,6 +137,11 @@ class EtcdBenchmarkEvents(Object):
         except BenchmarkConfigurationError as e:
             event.set_results({"error": e.message})
             event.fail(e.detailed_description)
+        except systemd.SystemdError:
+            event.set_results(
+                {"error": "Internal charm error starting benchmark service / metrics exporter"}
+            )
+            event.fail("Internal charm error starting benchmark service / metrics exporter")
 
     def _on_stop_action(self, event: ops.ActionEvent) -> None:
         """Handle stop action event."""
@@ -139,17 +154,25 @@ class EtcdBenchmarkEvents(Object):
             logger.error(detailed_error_str)
             return
 
-        self.charm.workload.stop_service()
+        try:
+            self.charm.workload.stop_service()
 
-        event.set_results(
-            {
-                "results": (
-                    "Successfully signalled stop of current run.\n"
-                    "Final summary will be available shortly, "
-                    "and can be viewed on the console using the 'get-summary' action."
-                )
-            }
-        )
+            self.charm.metrics_exporter_manager.stop_metrics_exporter()
+
+            event.set_results(
+                {
+                    "results": (
+                        "Successfully signalled stop of current run.\n"
+                        "Final summary will be available shortly, "
+                        "and can be viewed on the console using the 'get-summary' action."
+                    )
+                }
+            )
+        except systemd.SystemdError:
+            event.set_results(
+                {"error": "Internal charm error stopping benchmark service / metrics exporter"}
+            )
+            event.fail("Internal charm error stopping benchmark service / metrics exporter")
 
     def _on_list_tests_action(self, event: ops.ActionEvent) -> None:
         """Handle list-tests action event."""

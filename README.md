@@ -71,7 +71,7 @@ juju run charmed-etcd-benchmark-operator/leader stop
 ```
 
 9. Alternatively, there are two ways to bound the benchmark run: setting the `duration` (in seconds), or `total-transaction` configs. The test will terminate accordingly.
-Note that only one of these config options can be set to a non-zero value.
+In case both are set, the test will terminate when either of the conditions is met.
 ```bash
 juju config charmed-etcd-benchmark-operator duration=1200
 
