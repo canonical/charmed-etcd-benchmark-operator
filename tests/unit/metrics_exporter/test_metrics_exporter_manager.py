@@ -27,12 +27,15 @@ def test_start_metrics_exporter_renders_service_with_charm_venv_python(tmp_path)
         patch("managers.metrics_exporter.systemd.service_start") as start,
         patch.dict("os.environ", {"CHARM_DIR": "/var/lib/juju/agents/unit-test/charm"}),
     ):
-        MetricsExporterManager().start_metrics_exporter({"results_dir": "/tmp/test-1/results"})
+        MetricsExporterManager().start_metrics_exporter(
+            {"results_dir": "/tmp/test-1/results", "current_test_id": "test-1"}
+        )
 
     render.assert_called_once()
     _, context = render.call_args.args
     assert context == {
         "jsonl_path": "/tmp/test-1/results/stdout.jsonl",
+        "test_id": "test-1",
         "metrics_port": "9100",
         "python_bin": "/var/lib/juju/agents/unit-test/charm/venv/bin/python",
         "runner_path": "/usr/local/bin/benchmark_metrics_exporter.py",
@@ -59,7 +62,9 @@ def test_start_metrics_exporter_raises_when_service_enable_fails(tmp_path, caplo
         patch.dict("os.environ", {"CHARM_DIR": "/var/lib/juju/agents/unit-test/charm"}),
     ):
         with pytest.raises(systemd.SystemdError):
-            MetricsExporterManager().start_metrics_exporter({"results_dir": "/tmp/test-1/results"})
+            MetricsExporterManager().start_metrics_exporter(
+                {"results_dir": "/tmp/test-1/results", "current_test_id": "test-1"}
+            )
 
     start.assert_not_called()
     assert "Metric exporter service could not be enabled cleanly" in caplog.text
@@ -81,7 +86,9 @@ def test_start_metrics_exporter_raises_when_service_start_fails(tmp_path, caplog
         patch.dict("os.environ", {"CHARM_DIR": "/var/lib/juju/agents/unit-test/charm"}),
     ):
         with pytest.raises(systemd.SystemdError):
-            MetricsExporterManager().start_metrics_exporter({"results_dir": "/tmp/test-1/results"})
+            MetricsExporterManager().start_metrics_exporter(
+                {"results_dir": "/tmp/test-1/results", "current_test_id": "test-1"}
+            )
 
     assert "Metric exporter service could not be enabled cleanly" in caplog.text
 

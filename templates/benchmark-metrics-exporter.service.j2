@@ -8,6 +8,7 @@ Type=simple
 Restart=no
 
 Environment=ETCD_BENCHMARK_JSONL_PATH={{ jsonl_path }}
+Environment=ETCD_BENCHMARK_TEST_ID={{ test_id }}
 Environment=ETCD_BENCHMARK_METRICS_PORT={{ metrics_port }}
 
 ExecStart={{ python_bin }} {{ runner_path }}

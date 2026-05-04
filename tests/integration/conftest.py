@@ -93,7 +93,7 @@ def juju_vm_model(arch: str, lxd_cloud: str, lxd_controller: str, juju: Juju):
             yield juju_lxd
             return
 
-    with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller, keep=True) as juju_lxd:
+    with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller) as juju_lxd:
         juju_lxd.wait_timeout = 1000
         juju_lxd.cli("set-model-constraints", f"arch={arch}")
         yield juju_lxd

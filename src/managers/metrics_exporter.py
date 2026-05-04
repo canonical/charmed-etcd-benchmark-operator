@@ -31,6 +31,7 @@ class MetricsExporterManager:
         charm_dir = os.environ.get("CHARM_DIR", "")
         metrics_config = {
             "jsonl_path": f"{config.get('results_dir', '')}/stdout.jsonl",
+            "test_id": str(config.get("current_test_id", "")),
             "metrics_port": METRICS_PORT,
             "python_bin": f"{charm_dir}/venv/bin/python",
             "runner_path": METRICS_EXPORTER_RUNNER_FILE_PATH,

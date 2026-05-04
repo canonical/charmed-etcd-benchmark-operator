@@ -43,9 +43,10 @@ def test_benchmark_metrics_sets_exporter_up(runner_module: ModuleType) -> None:
         patch.object(runner_module, "Gauge", return_value=fake_gauge),
         patch.object(runner_module, "Counter", return_value=MagicMock()),
     ):
-        runner_module.BenchmarkMetrics()
+        runner_module.BenchmarkMetrics(test_id="test-1")
 
-    fake_gauge.set.assert_called_with(1)
+    fake_gauge.labels.assert_called_with("test-1")
+    fake_gauge.labels.return_value.set.assert_called_with(1)
 
 
 def test_handle_record_ignores_non_newer_sample_ids(
@@ -86,11 +87,13 @@ def test_process_new_data_increments_parse_errors_on_invalid_json(
     path.write_text("{bad-json}\n", encoding="utf-8")
 
     metrics = MagicMock()
+    metrics.test_id = "test-1"
     tailer = runner_module.JsonlTailer(path, metrics)
 
     tailer._process_new_data()
 
-    metrics.parse_errors.inc.assert_called_once_with()
+    metrics.parse_errors.labels.assert_called_once_with("test-1")
+    metrics.parse_errors.labels.return_value.inc.assert_called_once_with()
 
 
 def test_process_new_data_processes_complete_line_once(
@@ -102,13 +105,15 @@ def test_process_new_data_processes_complete_line_once(
     path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
     metrics = MagicMock()
+    metrics.test_id = "test-1"
     tailer = runner_module.JsonlTailer(path, metrics)
 
     with patch.object(tailer, "_handle_record") as handle_record:
         tailer._process_new_data()
 
     handle_record.assert_called_once_with(payload)
-    metrics.rows_processed.inc.assert_called_once_with()
+    metrics.rows_processed.labels.assert_called_once_with("test-1")
+    metrics.rows_processed.labels.return_value.inc.assert_called_once_with()
 
 
 def test_process_new_data_ignores_partial_line(runner_module: ModuleType, tmp_path: Path) -> None:
@@ -129,6 +134,7 @@ def test_process_new_data_ignores_partial_line(runner_module: ModuleType, tmp_pa
 def test_publish_updates_metric_values(runner_module: ModuleType, tmp_path: Path) -> None:
     """_publish should emit gauges for both read and write operations."""
     metrics = MagicMock()
+    metrics.test_id = "test-1"
 
     label_gauge = MagicMock()
     for metric_name in (
@@ -167,11 +173,22 @@ def test_publish_updates_metric_values(runner_module: ModuleType, tmp_path: Path
 
     tailer._publish(payload)
 
-    metrics.iteration.set.assert_called_once_with(7)
-    metrics.last_ts.set.assert_called_once()
+    metrics.iteration.labels.assert_called_once_with("test-1")
+    metrics.iteration.labels.return_value.set.assert_called_once_with(7)
+    metrics.last_ts.labels.assert_called_once_with("test-1")
+    metrics.last_ts.labels.return_value.set.assert_called_once()
     assert metrics.total_ops.labels.call_count == 2
     assert metrics.avg_latency.labels.call_count == 2
     assert metrics.latency_quantile.labels.call_count == 6
+
+
+def test_main_raises_when_test_env_is_missing(runner_module: ModuleType) -> None:
+    """Main should fail fast when ETCD_BENCHMARK_TEST_ID is not configured."""
+    with patch.dict(os.environ, {"ETCD_BENCHMARK_JSONL_PATH": "/tmp/stdout.jsonl"}, clear=True):
+        with pytest.raises(RuntimeError) as e:
+            runner_module.main()
+
+    assert "ETCD_BENCHMARK_TEST_ID must be set" in str(e.value)
 
 
 def test_main_raises_when_jsonl_path_env_is_missing(runner_module: ModuleType) -> None:
@@ -187,6 +204,7 @@ def test_main_starts_server_and_thread(runner_module: ModuleType) -> None:
     """Main should start Prometheus HTTP server and spawn tailer thread."""
     env = {
         "ETCD_BENCHMARK_JSONL_PATH": "/tmp/stdout.jsonl",
+        "ETCD_BENCHMARK_TEST_ID": "test-1",
         "ETCD_BENCHMARK_METRICS_PORT": "9999",
     }
 
