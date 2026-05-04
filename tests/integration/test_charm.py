@@ -112,7 +112,7 @@ def test_metrics_server(juju_vm_model: Juju) -> None:
 
     assert "# HELP etcd_benchmark_exporter_up Exporter health" in metrics
     assert "# TYPE etcd_benchmark_exporter_up gauge" in metrics
-    assert f'etcd_benchmark_exporter_up 1.0{{test_id="{test_id}"}}' in metrics, (
+    assert f'etcd_benchmark_exporter_up{{test_id="{test_id}"}} 1.0' in metrics, (
         "Metrics exporter should be healthy"
     )
     assert f'etcd_benchmark_total_ops{{test_id="{test_id}",op_type="read"}}' in metrics
