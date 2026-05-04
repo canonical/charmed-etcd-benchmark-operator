@@ -324,8 +324,24 @@ def _make_stderr_content():
 def _make_stdout_jsonl():
     row = json.dumps(
         {
-            "read": {"ops": 100, "rps": 1000.0, "p50": 0.005, "p90": 0.020, "p99": 0.030, "avg": 0.010, "stddev": 0.001},
-            "write": {"ops": 50, "rps": 500.0, "p50": 0.010, "p90": 0.030, "p99": 0.040, "avg": 0.020, "stddev": 0.002},
+            "read": {
+                "ops": 100,
+                "rps": 1000.0,
+                "p50": 0.005,
+                "p90": 0.020,
+                "p99": 0.030,
+                "avg": 0.010,
+                "stddev": 0.001,
+            },
+            "write": {
+                "ops": 50,
+                "rps": 500.0,
+                "p50": 0.010,
+                "p90": 0.030,
+                "p99": 0.040,
+                "avg": 0.020,
+                "stddev": 0.002,
+            },
         }
     )
     return row + "\n"
@@ -669,8 +685,24 @@ def test_aggregate_jsonl_results_aggregates_multiple_rows(tmp_path):
     etcd_benchmark_manager, _ = _make_etcd_benchmark_manager()
 
     row = {
-        "read": {"ops": 10, "rps": 100.0, "p50": 0.005, "p90": 0.020, "p99": 0.030, "avg": 0.010, "stddev": 0.001},
-        "write": {"ops": 5, "rps": 50.0, "p50": 0.010, "p90": 0.030, "p99": 0.040, "avg": 0.020, "stddev": 0.002},
+        "read": {
+            "ops": 10,
+            "rps": 100.0,
+            "p50": 0.005,
+            "p90": 0.020,
+            "p99": 0.030,
+            "avg": 0.010,
+            "stddev": 0.001,
+        },
+        "write": {
+            "ops": 5,
+            "rps": 50.0,
+            "p50": 0.010,
+            "p90": 0.030,
+            "p99": 0.040,
+            "avg": 0.020,
+            "stddev": 0.002,
+        },
     }
     stdout_path = tmp_path / "stdout.jsonl"
     stdout_path.write_text(json.dumps(row) + "\n" + json.dumps(row) + "\n")
@@ -682,4 +714,3 @@ def test_aggregate_jsonl_results_aggregates_multiple_rows(tmp_path):
     assert aggregates["write"]["total_ops"] == 10
     # stddev_weight should be (ops-1) * number_of_rows = 9 * 2 = 18
     assert aggregates["read"]["stddev_weight"] == 18
-

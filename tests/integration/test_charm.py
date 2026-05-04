@@ -92,8 +92,10 @@ def test_get_summary_action(juju_vm_model: Juju) -> None:
     summary = json.loads(summary_action.results["results"])
     assert "metadata" in summary, "Summary should contain 'metadata'"
     assert "operations" in summary, "Summary should contain 'operations'"
-    assert summary["metadata"]["test_id"] == test_id, "test_id in summary should match requested ID"
-    assert summary["metadata"]["is_active"] == True, "Tests should still be active"
+    assert summary["metadata"]["test_id"] == test_id, (
+        "test_id in summary should match requested ID"
+    )
+    assert summary["metadata"]["is_active"], "Tests should still be active"
     logger.info("get-summary output: %s", json.dumps(summary, indent=2))
 
 
@@ -101,27 +103,38 @@ def test_metrics_server(juju_vm_model: Juju) -> None:
     """Test that prometheus-friendly metrics are exposed at metrics port."""
     # TODO: add COS-lite integration tests here once COS integration is implemented.
 
-    metrics = juju_vm_model.ssh(f"{CHARMED_ETCD_BENCHMARK_OPERATOR}/leader", f"curl http://localhost:{METRICS_PORT}")
+    metrics = juju_vm_model.ssh(
+        f"{CHARMED_ETCD_BENCHMARK_OPERATOR}/leader", f"curl http://localhost:{METRICS_PORT}"
+    )
     logger.info(metrics)
 
     test_id = _retrieve_test_id(juju_vm_model)
 
-    assert '# HELP etcd_benchmark_exporter_up Exporter health' in metrics
-    assert '# TYPE etcd_benchmark_exporter_up gauge' in metrics
-    assert f'etcd_benchmark_exporter_up 1.0{{test_id="{test_id}"}}' in metrics, "Metrics exporter should be healthy"
+    assert "# HELP etcd_benchmark_exporter_up Exporter health" in metrics
+    assert "# TYPE etcd_benchmark_exporter_up gauge" in metrics
+    assert f'etcd_benchmark_exporter_up 1.0{{test_id="{test_id}"}}' in metrics, (
+        "Metrics exporter should be healthy"
+    )
     assert f'etcd_benchmark_total_ops{{test_id="{test_id}",op_type="read"}}' in metrics
     assert f'etcd_benchmark_total_ops{{test_id="{test_id}",op_type="write"}}' in metrics
-    assert f'etcd_benchmark_average_latency_seconds{{test_id="{test_id}",op_type="read"}}' in metrics
-    assert f'etcd_benchmark_average_latency_seconds{{test_id="{test_id}",op_type="write"}}' in metrics
-    assert f'etcd_benchmark_stddev_latency_seconds{{test_id="{test_id}",op_type="read"}}' in metrics
-    assert f'etcd_benchmark_stddev_latency_seconds{{test_id="{test_id}",op_type="write"}}' in metrics
+    assert (
+        f'etcd_benchmark_average_latency_seconds{{test_id="{test_id}",op_type="read"}}' in metrics
+    )
+    assert (
+        f'etcd_benchmark_average_latency_seconds{{test_id="{test_id}",op_type="write"}}' in metrics
+    )
+    assert (
+        f'etcd_benchmark_stddev_latency_seconds{{test_id="{test_id}",op_type="read"}}' in metrics
+    )
+    assert (
+        f'etcd_benchmark_stddev_latency_seconds{{test_id="{test_id}",op_type="write"}}' in metrics
+    )
     assert f'etcd_benchmark_throughput_rps{{test_id="{test_id}",op_type="read"}}' in metrics
     assert f'etcd_benchmark_throughput_rps{{test_id="{test_id}",op_type="write"}}' in metrics
 
 
 def test_stop_action(juju_vm_model: Juju) -> None:
     """Test that stop action terminates benchmark."""
-
     stop_action = juju_vm_model.run(f"{CHARMED_ETCD_BENCHMARK_OPERATOR}/leader", "stop")
     assert stop_action.status == "completed", "stop action should succeed"
     assert "Successfully signalled stop of current run." in str(stop_action.results["results"])
@@ -143,8 +156,10 @@ def test_stop_action(juju_vm_model: Juju) -> None:
     summary = json.loads(summary_action.results["results"])
     assert "metadata" in summary, "Summary should contain 'metadata'"
     assert "operations" in summary, "Summary should contain 'operations'"
-    assert summary["metadata"]["test_id"] == test_id, "test_id in summary should match requested ID"
-    assert summary["metadata"]["is_active"] == False, "Tests should still be active"
+    assert summary["metadata"]["test_id"] == test_id, (
+        "test_id in summary should match requested ID"
+    )
+    assert not summary["metadata"]["is_active"], "Tests should still be active"
     logger.info("get-summary output after test completion: %s", json.dumps(summary, indent=2))
 
 
@@ -161,4 +176,3 @@ def _retrieve_test_id(juju_vm_model: Juju) -> str:
     test_id = first_line.split()[0]
     logger.info("Using test ID: %s", test_id)
     return test_id
-
