@@ -152,3 +152,7 @@ requires:
     interface: etcd_client
   certificates:
     interface: tls-certificates
+
+provides:
+  cos-agent:
+    interface: cos_agent

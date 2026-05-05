@@ -6,11 +6,14 @@
 
 """A basic set of integration tests to verify charm functionality."""
 
+import json
 import logging
 import pathlib
 from time import sleep
 
-from helpers import apps_active_and_agents_idle
+import jubilant
+import requests
+from helpers import apps_active_and_agents_idle, get_leader_unit_name, get_unit_relation_data
 from jubilant import Juju
 
 from literals import METRICS_PORT
@@ -20,6 +23,12 @@ logger = logging.getLogger(__name__)
 ETCD_APP_NAME = "charmed-etcd"
 TLS_NAME = "self-signed-certificates"
 CHARMED_ETCD_BENCHMARK_OPERATOR = "charmed-etcd-benchmark-operator"
+GRAFANA_AGENT_APP_NAME = "grafana-agent"
+GRAFANA_AGENT_CHANNEL = "2/stable"
+PROMETHEUS_APP_NAME = "prometheus"
+GRAFANA_APP_NAME = "grafana"
+COS_RELATION_NAME = "cos-agent"
+ADMIN = "admin"
 
 
 def test_deploy(benchmark_charm: pathlib.Path, juju_vm_model: Juju):
@@ -101,8 +110,6 @@ def test_get_summary_action(juju_vm_model: Juju) -> None:
 
 def test_metrics_server(juju_vm_model: Juju) -> None:
     """Test that prometheus-friendly metrics are exposed at metrics port."""
-    # TODO: add COS-lite integration tests here once COS integration is implemented.
-
     metrics = juju_vm_model.ssh(
         f"{CHARMED_ETCD_BENCHMARK_OPERATOR}/leader", f"curl http://localhost:{METRICS_PORT}"
     )
@@ -114,6 +121,99 @@ def test_metrics_server(juju_vm_model: Juju) -> None:
     assert "# TYPE etcd_benchmark_exporter_up gauge" in metrics
     assert f'etcd_benchmark_exporter_up{{test_id="{test_id}"}} 1.0' in metrics, (
         "Metrics exporter should be healthy"
+    )
+
+
+def test_integration_with_grafana_agent(juju_vm_model: Juju):
+    # deploy grafana-agent and integrate
+    juju_vm_model.deploy(GRAFANA_AGENT_APP_NAME, channel=GRAFANA_AGENT_CHANNEL)
+    juju_vm_model.integrate(CHARMED_ETCD_BENCHMARK_OPERATOR, GRAFANA_AGENT_APP_NAME)
+    juju_vm_model.wait(
+        lambda status: jubilant.all_agents_idle(
+            status, GRAFANA_AGENT_APP_NAME, CHARMED_ETCD_BENCHMARK_OPERATOR
+        ),
+        timeout=1200,
+    )
+
+    # get relation data sent to grafana-agent
+    cos_leader_name = get_leader_unit_name(juju_vm_model, GRAFANA_AGENT_APP_NAME)
+    leader_name = get_leader_unit_name(juju_vm_model, CHARMED_ETCD_BENCHMARK_OPERATOR)
+    relation_data = get_unit_relation_data(
+        juju_vm_model, cos_leader_name, leader_name, COS_RELATION_NAME, "config"
+    )
+    if not isinstance(relation_data, dict):
+        assert relation_data
+        relation_data = json.loads(relation_data)
+
+    # assert that right targets are set in grafana-agent
+    scrape_job = relation_data["metrics_scrape_jobs"][0]  # pyright: ignore [reportArgumentType]
+    assert scrape_job["static_configs"][0]["targets"][0].endswith(f":{METRICS_PORT}")  # pyright: ignore [reportArgumentType]
+
+
+def test_etcd_benchmark_metrics_on_cos(
+    juju_vm_model: Juju, juju_k8s_model: Juju, lxd_controller: str
+):
+    # further, verify integration with cos-lite bundle.
+
+    # deploy COS essentials for grafana-agent
+    juju_k8s_model.deploy("cos-lite", trust=True)
+    juju_k8s_model.wait(jubilant.all_active)
+    juju_k8s_model.wait(jubilant.all_agents_idle)
+
+    assert juju_k8s_model.model
+    juju_k8s_model_name = juju_k8s_model.model.split(":")[1]
+
+    # offer COS interfaces to be cross-model related with the machine model
+    juju_k8s_model.offer(
+        app=f"{juju_k8s_model_name}.{PROMETHEUS_APP_NAME}",
+        endpoint="receive-remote-write",
+        controller=lxd_controller,
+    )
+    juju_k8s_model.offer(
+        app=f"{juju_k8s_model_name}.{GRAFANA_APP_NAME}",
+        endpoint="grafana-dashboard",
+        controller=lxd_controller,
+    )
+    juju_k8s_model.wait(jubilant.all_agents_idle)
+
+    # consume the offers on the machine model
+    juju_vm_model.consume(
+        model_and_app=f"{juju_k8s_model_name}.{GRAFANA_APP_NAME}",
+        controller=lxd_controller,
+        owner=ADMIN,
+    )
+    juju_vm_model.consume(
+        model_and_app=f"{juju_k8s_model_name}.{PROMETHEUS_APP_NAME}",
+        controller=lxd_controller,
+        owner=ADMIN,
+    )
+
+    # integrate the COS charms with grafana-agent on the machine
+    juju_vm_model.integrate(GRAFANA_AGENT_APP_NAME, GRAFANA_APP_NAME)
+    juju_vm_model.integrate(GRAFANA_AGENT_APP_NAME, PROMETHEUS_APP_NAME)
+    juju_vm_model.wait(
+        lambda status: jubilant.all_agents_idle(
+            status, GRAFANA_AGENT_APP_NAME, CHARMED_ETCD_BENCHMARK_OPERATOR
+        ),
+        timeout=1200,
+    )
+    juju_k8s_model.wait(jubilant.all_agents_idle)
+
+    # assert that etcd benchmark metrics show up in prometheus
+    result = juju_k8s_model.run(action="show-proxied-endpoints", unit="traefik/0")
+    logger.info(f"Proxied endpoints from traefik: {result.results['proxied-endpoints']}")
+    proxied_endpoints = json.loads(result.results["proxied-endpoints"])
+    prometheus_url = proxied_endpoints["prometheus/0"]["url"]
+    prometheus_endpoint = f"{prometheus_url}/api/v1/label/__name__/values"
+
+    prometheus_metrics_raw = requests.get(prometheus_endpoint)
+    prometheus_metrics_raw.raise_for_status()
+    all_metrics = prometheus_metrics_raw.json()["data"]
+    etcd_benchmark_metrics = [m for m in all_metrics if "etcd_benchmark" in m]
+    assert etcd_benchmark_metrics, "No etcd benchmark related metrics found in Prometheus"
+    assert (
+        "etcd_benchmark_exporter_up" in etcd_benchmark_metrics
+        and "etcd_benchmark_average_latency_seconds" in etcd_benchmark_metrics
     )
 
 

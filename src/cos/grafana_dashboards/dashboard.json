@@ -1,0 +1,154 @@
+{
+  "title": "Etcd Benchmark Overview",
+  "uid": "etcd_benchmark_dashboard",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "test_id",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(etcd_benchmark_iteration, test_id)",
+        "query": {
+          "query": "label_values(etcd_benchmark_iteration, test_id)",
+          "refId": "StandardVariableQuery"
+        },
+        "multi": true,
+        "includeAll": true,
+        "refresh": 1,
+        "label": "Test ID"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Throughput (RPS)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum by (test_id, op_type) (etcd_benchmark_throughput_rps{test_id=~\"$test_id\"})",
+          "legendFormat": "{{op_type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Average Latency (s)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum by (test_id, op_type) (etcd_benchmark_average_latency_seconds{test_id=~\"$test_id\"})",
+          "legendFormat": "{{op_type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "p50 Latency",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (test_id, op_type) (etcd_benchmark_latency_seconds{quantile=\"0.50\", test_id=~\"$test_id\"})",
+          "legendFormat": "{{op_type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "p90 Latency",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (test_id, op_type) (etcd_benchmark_latency_seconds{quantile=\"0.90\", test_id=~\"$test_id\"})",
+          "legendFormat": "{{op_type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "p99 Latency",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (test_id, op_type) (etcd_benchmark_latency_seconds{quantile=\"0.99\", test_id=~\"$test_id\"})",
+          "legendFormat": "{{op_type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Exporter Health",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "expr": "max(etcd_benchmark_exporter_up{test_id=~\"$test_id\"})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
