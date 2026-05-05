@@ -24,7 +24,7 @@ parts:
     override-build: |
       craftctl default
       cp -r templates "$CRAFT_PART_INSTALL/templates"
-  benchmark-tool: #TODO remove once benchmark tool is available in charmed-etcd snap
+  benchmark-tool:
     plugin: dump
     source: https://github.com/Soundarya03/etcd.git
     source-type: git
@@ -134,6 +134,10 @@ requires:
     interface: etcd_client
   certificates:
     interface: tls-certificates
+
+provides:
+  cos-agent:
+    interface: cos_agent
 
 peers:
   benchmark-peers:
