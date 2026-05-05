@@ -142,6 +142,7 @@ integration = [
     { name = "pytest-jubilant" },
     { name = "python-dateutil" },
     { name = "requests" },
+    { name = "tenacity" },
 ]
 lint = [
     { name = "charmlibs-interfaces-tls-certificates" },
@@ -154,6 +155,7 @@ lint = [
     { name = "ops" },
     { name = "prometheus-client" },
     { name = "pyright" },
+    { name = "requests" },
     { name = "ruff" },
     { name = "tenacity" },
 ]
@@ -205,6 +207,7 @@ integration = [
     { name = "pytest-jubilant", specifier = "==1.3.0" },
     { name = "python-dateutil" },
     { name = "requests" },
+    { name = "tenacity" },
 ]
 lint = [
     { name = "charmlibs-interfaces-tls-certificates" },
@@ -217,6 +220,7 @@ lint = [
     { name = "ops", specifier = ">=3,<4" },
     { name = "prometheus-client" },
     { name = "pyright" },
+    { name = "requests" },
     { name = "ruff" },
     { name = "tenacity" },
 ]
