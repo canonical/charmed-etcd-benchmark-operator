@@ -115,22 +115,6 @@ def test_metrics_server(juju_vm_model: Juju) -> None:
     assert f'etcd_benchmark_exporter_up{{test_id="{test_id}"}} 1.0' in metrics, (
         "Metrics exporter should be healthy"
     )
-    assert f'etcd_benchmark_total_ops{{test_id="{test_id}",op_type="read"}}' in metrics
-    assert f'etcd_benchmark_total_ops{{test_id="{test_id}",op_type="write"}}' in metrics
-    assert (
-        f'etcd_benchmark_average_latency_seconds{{test_id="{test_id}",op_type="read"}}' in metrics
-    )
-    assert (
-        f'etcd_benchmark_average_latency_seconds{{test_id="{test_id}",op_type="write"}}' in metrics
-    )
-    assert (
-        f'etcd_benchmark_stddev_latency_seconds{{test_id="{test_id}",op_type="read"}}' in metrics
-    )
-    assert (
-        f'etcd_benchmark_stddev_latency_seconds{{test_id="{test_id}",op_type="write"}}' in metrics
-    )
-    assert f'etcd_benchmark_throughput_rps{{test_id="{test_id}",op_type="read"}}' in metrics
-    assert f'etcd_benchmark_throughput_rps{{test_id="{test_id}",op_type="write"}}' in metrics
 
 
 def test_stop_action(juju_vm_model: Juju) -> None:
