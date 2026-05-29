@@ -206,9 +206,12 @@ def test_etcd_benchmark_metrics_on_cos(
     prometheus_url = proxied_endpoints["prometheus/0"]["url"]
     prometheus_endpoint = f"{prometheus_url}/api/v1/label/__name__/values"
 
+    sleep(10)
+
     prometheus_metrics_raw = requests.get(prometheus_endpoint)
     prometheus_metrics_raw.raise_for_status()
     all_metrics = prometheus_metrics_raw.json()["data"]
+    logger.info(f"Prometheus metrics: {all_metrics}")
     etcd_benchmark_metrics = [m for m in all_metrics if "etcd_benchmark" in m]
     assert etcd_benchmark_metrics, "No etcd benchmark related metrics found in Prometheus"
     assert (

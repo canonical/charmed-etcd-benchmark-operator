@@ -2,7 +2,7 @@
   "title": "Etcd Benchmark Overview",
   "uid": "etcd_benchmark_dashboard",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 6,
   "refresh": "10s",
   "time": {
     "from": "now-30m",
@@ -33,6 +33,10 @@
     {
       "type": "timeseries",
       "title": "Throughput (RPS)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -41,8 +45,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (test_id, op_type) (etcd_benchmark_throughput_rps{test_id=~\"$test_id\"})",
-          "legendFormat": "{{op_type}}",
+          "expr": "etcd_benchmark_throughput_rps{test_id=~\"$test_id\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "legendFormat": "{{test_id}} {{op_type}}",
           "refId": "A"
         }
       ]
@@ -50,6 +58,10 @@
     {
       "type": "timeseries",
       "title": "Average Latency (s)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -58,8 +70,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (test_id, op_type) (etcd_benchmark_average_latency_seconds{test_id=~\"$test_id\"})",
-          "legendFormat": "{{op_type}}",
+          "expr": "etcd_benchmark_average_latency_seconds{test_id=~\"$test_id\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "legendFormat": "{{test_id}} {{op_type}}",
           "refId": "A"
         }
       ]
@@ -67,6 +83,10 @@
     {
       "type": "timeseries",
       "title": "p50 Latency",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "gridPos": {
         "h": 6,
         "w": 8,
@@ -75,8 +95,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (test_id, op_type) (etcd_benchmark_latency_seconds{quantile=\"0.50\", test_id=~\"$test_id\"})",
-          "legendFormat": "{{op_type}}",
+          "expr": "etcd_benchmark_latency_seconds{quantile=\"0.50\", test_id=~\"$test_id\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "legendFormat": "{{test_id}} {{op_type}}",
           "refId": "A"
         }
       ]
@@ -84,6 +108,10 @@
     {
       "type": "timeseries",
       "title": "p90 Latency",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "gridPos": {
         "h": 6,
         "w": 8,
@@ -92,8 +120,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (test_id, op_type) (etcd_benchmark_latency_seconds{quantile=\"0.90\", test_id=~\"$test_id\"})",
-          "legendFormat": "{{op_type}}",
+          "expr": "etcd_benchmark_latency_seconds{quantile=\"0.90\", test_id=~\"$test_id\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "legendFormat": "{{test_id}} {{op_type}}",
           "refId": "A"
         }
       ]
@@ -101,6 +133,10 @@
     {
       "type": "timeseries",
       "title": "p99 Latency",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "gridPos": {
         "h": 6,
         "w": 8,
@@ -109,8 +145,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (test_id, op_type) (etcd_benchmark_latency_seconds{quantile=\"0.99\", test_id=~\"$test_id\"})",
-          "legendFormat": "{{op_type}}",
+          "expr": "etcd_benchmark_latency_seconds{quantile=\"0.99\", test_id=~\"$test_id\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "legendFormat": "{{test_id}} {{op_type}}",
           "refId": "A"
         }
       ]
@@ -118,6 +158,10 @@
     {
       "type": "stat",
       "title": "Exporter Health",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -126,12 +170,32 @@
       },
       "targets": [
         {
-          "expr": "max(etcd_benchmark_exporter_up{test_id=~\"$test_id\"})",
+          "expr": "max(etcd_benchmark_exporter_up{test_id=~\"$test_id\"}) > bool 0",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "instant": true,
           "refId": "A"
         }
       ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
+          "noValue": "DOWN",
           "mappings": [
             {
               "type": "value",
@@ -147,6 +211,148 @@
               }
             }
           ]
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Total Elapsed Time",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 14
+      },
+      "targets": [
+        {
+          "expr": "sum(etcd_benchmark_elapsed_seconds_total{test_id=~\"$test_id\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Total Read Ops",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 14
+      },
+      "targets": [
+        {
+          "expr": "sum(etcd_benchmark_read_ops_total{test_id=~\"$test_id\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Total Write Ops",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 14
+      },
+      "targets": [
+        {
+          "expr": "sum(etcd_benchmark_write_ops_total{test_id=~\"$test_id\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheusds}"
+          },
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          }
         }
       }
     }
