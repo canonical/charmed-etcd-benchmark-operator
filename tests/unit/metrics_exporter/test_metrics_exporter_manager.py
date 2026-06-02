@@ -38,6 +38,7 @@ def test_start_metrics_exporter_renders_service_with_charm_venv_python(tmp_path)
         "test_id": "test-1",
         "metrics_port": "9100",
         "python_bin": "/var/lib/juju/agents/unit-test/charm/venv/bin/python",
+        "report_interval": 10,
         "runner_path": "/usr/local/bin/benchmark_metrics_exporter.py",
     }
     assert service_file.read_text() == "[Unit]\nDescription=x\n"
