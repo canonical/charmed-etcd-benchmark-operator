@@ -5,11 +5,22 @@
 import json
 import os
 import time
+from datetime import datetime
 from pathlib import Path
 from threading import Thread
-from datetime import datetime
 
-from prometheus_client import start_http_server, Gauge, Counter
+from prometheus_client import Counter, Gauge, start_http_server
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if not value:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
 
 
 class BenchmarkMetrics:
@@ -25,7 +36,6 @@ class BenchmarkMetrics:
             "Timestamp of last completed sample",
             ["test_id"],
         )
-
         self.total_ops = Gauge("etcd_benchmark_total_ops", "Total operations", ["test_id", "op_type"])
         self.avg_latency = Gauge(
             "etcd_benchmark_average_latency_seconds", "Average latency", ["test_id", "op_type"]
@@ -36,7 +46,6 @@ class BenchmarkMetrics:
         self.throughput = Gauge(
             "etcd_benchmark_throughput_rps", "Throughput (req/sec)", ["test_id", "op_type"]
         )
-
         self.latency_quantile = Gauge(
             "etcd_benchmark_latency_seconds",
             "Latency percentiles",
@@ -51,14 +60,49 @@ class BenchmarkMetrics:
             "etcd_benchmark_jsonl_parse_errors_total", "JSONL parse errors", ["test_id"]
         )
         self.exporter_up = Gauge("etcd_benchmark_exporter_up", "Exporter health", ["test_id"])
+        self.total_elapsed = Counter(
+            "etcd_benchmark_elapsed_seconds_total",
+            "Cumulative elapsed seconds across processed benchmark samples",
+            ["test_id"],
+        )
+        self.total_read_ops = Counter(
+            "etcd_benchmark_read_ops_total",
+            "Cumulative read operations across processed benchmark samples",
+            ["test_id"],
+        )
+        self.total_write_ops = Counter(
+            "etcd_benchmark_write_ops_total",
+            "Cumulative write operations across processed benchmark samples",
+            ["test_id"],
+        )
 
         self.exporter_up.labels(self.test_id).set(1)
 
+    def add_benchmark_sample(self, obj: dict):
+        ts_epoch = datetime.fromisoformat(obj["ts"].replace("Z", "+00:00")).timestamp()
+
+        self.iteration.labels(self.test_id).set(float(obj["id"]))
+        self.last_ts.labels(self.test_id).set(ts_epoch)
+        self.total_elapsed.labels(self.test_id).inc(float(obj.get("elapsed_sec", 0.0)))
+        self.total_read_ops.labels(self.test_id).inc(float(obj.get("read", {}).get("ops", 0.0)))
+        self.total_write_ops.labels(self.test_id).inc(float(obj.get("write", {}).get("ops", 0.0)))
+
+        for op_type in ["read", "write"]:
+            data = obj[op_type]
+            self.total_ops.labels(self.test_id, op_type).set(float(data["ops"]))
+            self.avg_latency.labels(self.test_id, op_type).set(float(data["avg"]))
+            self.stddev_latency.labels(self.test_id, op_type).set(float(data["stddev"]))
+            self.throughput.labels(self.test_id, op_type).set(float(data["rps"]))
+            self.latency_quantile.labels(self.test_id, op_type, "0.50").set(float(data["p50"]))
+            self.latency_quantile.labels(self.test_id, op_type, "0.90").set(float(data["p90"]))
+            self.latency_quantile.labels(self.test_id, op_type, "0.99").set(float(data["p99"]))
+
 
 class JsonlTailer:
-    def __init__(self, path: Path, metrics: BenchmarkMetrics):
+    def __init__(self, path: Path, metrics: BenchmarkMetrics, poll_interval_seconds: int):
         self.path = path
         self.metrics = metrics
+        self.poll_interval_seconds = poll_interval_seconds
 
         self._position = 0
         self._inode = None
@@ -67,7 +111,7 @@ class JsonlTailer:
     def run(self):
         while True:
             self._process_new_data()
-            time.sleep(2)
+            time.sleep(self.poll_interval_seconds)
 
     def _process_new_data(self):
         if not self.path.exists():
@@ -122,31 +166,7 @@ class JsonlTailer:
         self._publish(obj)
 
     def _publish(self, obj: dict):
-        # iteration
-        self.metrics.iteration.labels(self.metrics.test_id).set(obj["id"])
-
-        # timestamp
-        ts = obj["ts"]
-        ts_epoch = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
-        self.metrics.last_ts.labels(self.metrics.test_id).set(ts_epoch)
-
-        for op_type in ["read", "write"]:
-            data = obj[op_type]
-
-            self.metrics.total_ops.labels(self.metrics.test_id, op_type).set(float(data["ops"]))
-            self.metrics.avg_latency.labels(self.metrics.test_id, op_type).set(float(data["avg"]))
-            self.metrics.stddev_latency.labels(self.metrics.test_id, op_type).set(float(data["stddev"]))
-            self.metrics.throughput.labels(self.metrics.test_id, op_type).set(float(data["rps"]))
-
-            self.metrics.latency_quantile.labels(self.metrics.test_id, op_type, "0.50").set(
-                float(data["p50"])
-            )
-            self.metrics.latency_quantile.labels(self.metrics.test_id, op_type, "0.90").set(
-                float(data["p90"])
-            )
-            self.metrics.latency_quantile.labels(self.metrics.test_id, op_type, "0.99").set(
-                float(data["p99"])
-            )
+        self.metrics.add_benchmark_sample(obj)
 
 
 def main():
@@ -154,6 +174,7 @@ def main():
     jsonl_path = os.environ.get("ETCD_BENCHMARK_JSONL_PATH")
     test_id = os.environ.get("ETCD_BENCHMARK_TEST_ID")
     port = int(os.environ.get("ETCD_BENCHMARK_METRICS_PORT", "9645"))
+    report_interval = _positive_int_env("ETCD_BENCHMARK_REPORT_INTERVAL", 10)
 
     if not jsonl_path:
         raise RuntimeError("ETCD_BENCHMARK_JSONL_PATH must be set")
@@ -164,7 +185,7 @@ def main():
 
     start_http_server(port)
 
-    tailer = JsonlTailer(Path(jsonl_path), metrics)
+    tailer = JsonlTailer(Path(jsonl_path), metrics, poll_interval_seconds=report_interval)
 
     t = Thread(target=tailer.run, daemon=True)
     t.start()

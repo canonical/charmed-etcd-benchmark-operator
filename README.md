@@ -78,7 +78,7 @@ juju config charmed-etcd-benchmark-operator duration=1200
 juju config charmed-etcd-benchmark-operator total-transactions=100000
 ```
 
-10. Another option of note is `report-interval`, which determines how often (in seconds) the benchmark results are logged. 
+10. Another option of note is `report-interval`, which determines how often (in seconds) the benchmark results are reported. 
 By default, it is set to 10 seconds.
 ```bash
 juju config charmed-etcd-benchmark-operator report-interval=30
@@ -107,6 +107,55 @@ juju run charmed-etcd-benchmark-operator/leader get-summary --string-args test-i
 14. Details are also logged to the juju log, and can be viewed using the following command:
 ```bash
 juju debug-log --replay
+```
+
+### Integration with cos-lite bundle
+
+This charm provides the `cos-agent` interface and exposes benchmark metrics in a Prometheus-friendly format,
+thus enabling us to integrate with `grafana-agent` and the cos-lite bundle.
+The steps below can be followed to view a grafana dashboard of the benchmark results:
+
+1. Switch to a kubernetes controller, add a new model, and deploy the cos-lite bundle.
+```bash
+juju add-model cos
+
+curl -L https://raw.githubusercontent.com/canonical/cos-lite-bundle/main/overlays/storage-small-overlay.yaml -O
+
+juju deploy cos-lite \
+        --trust \
+        --overlay ./offers-overlay.yaml
+```
+
+2. Switch back to the lxd controller, and consume the offers from the cos-lite bundle.
+```bash
+juju switch <machine_model>
+
+juju consume <k8s_controller>:admin/cos.prometheus-receive-remote-write
+juju consume <k8s_controller>:admin/cos.grafana-dashboards
+```
+
+3. Deploy grafana-agent in the same model as charmed-etcd-benchmark-operator, and integrate the charms.
+```bash
+juju deploy grafana-agent --base ubuntu@24.04
+
+juju integrate grafana-agent charmed-etcd-benchmark-operator
+```
+
+4. Finally, integrate grafana-agent with the cos bundle offers.
+```bash
+juju integrate grafana-agent prometheus-receive-remote-write
+juju integrate grafana-agent grafana-dashboards
+```
+
+5. We can now view the benchmark metrics and dashboard in Grafana. The endpoint and password can be queried like so:
+```bash
+juju switch <k8s_model>
+
+juju run traefik/0 show-proxied-endpoints --format=yaml \
+  | yq '."traefik/0".results."proxied-endpoints"' \
+  | jq
+
+juju run grafana/leader get-admin-password --model cos
 ```
 
 ## Other resources

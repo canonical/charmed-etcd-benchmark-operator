@@ -32,6 +32,7 @@ class MetricsExporterManager:
         metrics_config = {
             "jsonl_path": f"{config.get('results_dir', '')}/stdout.jsonl",
             "test_id": str(config.get("current_test_id", "")),
+            "report_interval": config.get("report_interval", 10),
             "metrics_port": METRICS_PORT,
             "python_bin": f"{charm_dir}/venv/bin/python",
             "runner_path": METRICS_EXPORTER_RUNNER_FILE_PATH,

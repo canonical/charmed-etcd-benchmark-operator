@@ -7,6 +7,7 @@
 import logging
 
 import ops
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 
 import workload
 from core.interfaces import EtcdInterfaceState
@@ -14,6 +15,7 @@ from core.tls import TLSState
 from events.etcd_benchmark import EtcdBenchmarkEvents
 from events.etcd_interface import EtcdInterfaceEvents
 from events.tls import TLSEvents
+from literals import METRICS_PORT
 from managers.config import ConfigManager
 from managers.etcd_benchmark import EtcdBenchmarkManager
 from managers.etcd_interface import EtcdInterfaceManager
@@ -43,6 +45,30 @@ class CharmedEtcdBenchmarkOperatorCharm(ops.CharmBase):
         self.etcd_benchmark_events = EtcdBenchmarkEvents(self)
         self.tls_events = TLSEvents(self)
         self.etcd_interface_events = EtcdInterfaceEvents(self)
+
+        # cos agent
+        self._grafana_agent = COSAgentProvider(
+            self,
+            dashboard_dirs=["./src/cos/grafana_dashboards"],
+            scrape_configs=[self._scrape_config()],
+        )
+
+    def _scrape_config(self):
+        unit_ip = self.model.get_binding("cos-agent").network.bind_address
+
+        return {
+            "job_name": "etcd-benchmark",
+            "static_configs": [
+                {
+                    "targets": [f"{unit_ip}:{METRICS_PORT}"],
+                    "labels": {
+                        "juju_model": self.model.name,
+                        "juju_application": self.app.name,
+                        "juju_unit": self.unit.name,
+                    },
+                }
+            ],
+        }
 
 
 if __name__ == "__main__":  # pragma: nocover
