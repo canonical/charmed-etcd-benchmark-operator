@@ -15,6 +15,7 @@ import jubilant
 import requests
 from helpers import apps_active_and_agents_idle, get_leader_unit_name, get_unit_relation_data
 from jubilant import Juju
+from tenacity import Retrying, stop_after_delay, wait_fixed
 
 from literals import METRICS_PORT
 
@@ -206,18 +207,21 @@ def test_etcd_benchmark_metrics_on_cos(
     prometheus_url = proxied_endpoints["prometheus/0"]["url"]
     prometheus_endpoint = f"{prometheus_url}/api/v1/label/__name__/values"
 
-    sleep(10)
-
-    prometheus_metrics_raw = requests.get(prometheus_endpoint)
-    prometheus_metrics_raw.raise_for_status()
-    all_metrics = prometheus_metrics_raw.json()["data"]
-    logger.info(f"Prometheus metrics: {all_metrics}")
-    etcd_benchmark_metrics = [m for m in all_metrics if "etcd_benchmark" in m]
-    assert etcd_benchmark_metrics, "No etcd benchmark related metrics found in Prometheus"
-    assert (
-        "etcd_benchmark_exporter_up" in etcd_benchmark_metrics
-        and "etcd_benchmark_average_latency_seconds" in etcd_benchmark_metrics
-    )
+    etcd_benchmark_metrics: list[str] = []
+    for attempt in Retrying(stop=stop_after_delay(180), wait=wait_fixed(10), reraise=True):
+        with attempt:
+            prometheus_metrics_raw = requests.get(prometheus_endpoint, timeout=20)
+            prometheus_metrics_raw.raise_for_status()
+            all_metrics = prometheus_metrics_raw.json()["data"]
+            etcd_benchmark_metrics = [m for m in all_metrics if m.startswith("etcd_benchmark_")]
+            logger.info(
+                "Prometheus etcd_benchmark metrics (attempt %s): %s",
+                attempt.retry_state.attempt_number,
+                etcd_benchmark_metrics,
+            )
+            assert etcd_benchmark_metrics, "No etcd benchmark related metrics found in Prometheus"
+            assert "etcd_benchmark_exporter_up" in etcd_benchmark_metrics
+            assert "etcd_benchmark_average_latency_seconds" in etcd_benchmark_metrics
 
 
 def test_stop_action(juju_vm_model: Juju) -> None:
