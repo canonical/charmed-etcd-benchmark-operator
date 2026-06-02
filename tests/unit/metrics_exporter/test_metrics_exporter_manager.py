@@ -22,6 +22,7 @@ def test_setup_metrics_exporter_returns_expected_config_with_charm_dir():
         "test_id": "test-1",
         "metrics_port": METRICS_PORT,
         "python_bin": "/var/lib/juju/agents/unit-test/charm/venv/bin/python",
+        "report_interval": 10,
         "runner_path": METRICS_EXPORTER_RUNNER_FILE_PATH,
     }
 

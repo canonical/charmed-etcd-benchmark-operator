@@ -54,7 +54,7 @@ def test_handle_record_ignores_non_newer_sample_ids(
 ) -> None:
     """_handle_record should skip records whose id is not strictly newer."""
     metrics = MagicMock()
-    tailer = runner_module.JsonlTailer(tmp_path / "stdout.jsonl", metrics)
+    tailer = runner_module.JsonlTailer(tmp_path / "stdout.jsonl", metrics, 5)
     tailer._latest_id = 10
 
     with patch.object(tailer, "_publish") as publish:
@@ -68,7 +68,7 @@ def test_handle_record_publishes_newer_sample_ids(
 ) -> None:
     """_handle_record should publish records with strictly increasing ids."""
     metrics = MagicMock()
-    tailer = runner_module.JsonlTailer(tmp_path / "stdout.jsonl", metrics)
+    tailer = runner_module.JsonlTailer(tmp_path / "stdout.jsonl", metrics, 10)
 
     payload = {"id": 1, "ts": "2026-04-30T12:00:00Z", "read": {}, "write": {}}
 
@@ -88,7 +88,7 @@ def test_process_new_data_increments_parse_errors_on_invalid_json(
 
     metrics = MagicMock()
     metrics.test_id = "test-1"
-    tailer = runner_module.JsonlTailer(path, metrics)
+    tailer = runner_module.JsonlTailer(path, metrics, 10)
 
     tailer._process_new_data()
 
@@ -106,7 +106,7 @@ def test_process_new_data_processes_complete_line_once(
 
     metrics = MagicMock()
     metrics.test_id = "test-1"
-    tailer = runner_module.JsonlTailer(path, metrics)
+    tailer = runner_module.JsonlTailer(path, metrics, 10)
 
     with patch.object(tailer, "_handle_record") as handle_record:
         tailer._process_new_data()
@@ -122,7 +122,7 @@ def test_process_new_data_ignores_partial_line(runner_module: ModuleType, tmp_pa
     path.write_text('{"id": 1', encoding="utf-8")
 
     metrics = MagicMock()
-    tailer = runner_module.JsonlTailer(path, metrics)
+    tailer = runner_module.JsonlTailer(path, metrics, 10)
 
     with patch.object(tailer, "_handle_record") as handle_record:
         tailer._process_new_data()
@@ -132,21 +132,11 @@ def test_process_new_data_ignores_partial_line(runner_module: ModuleType, tmp_pa
 
 
 def test_publish_updates_metric_values(runner_module: ModuleType, tmp_path: Path) -> None:
-    """_publish should emit gauges for both read and write operations."""
+    """_publish should forward the parsed payload to BenchmarkMetrics."""
     metrics = MagicMock()
     metrics.test_id = "test-1"
 
-    label_gauge = MagicMock()
-    for metric_name in (
-        "total_ops",
-        "avg_latency",
-        "stddev_latency",
-        "throughput",
-        "latency_quantile",
-    ):
-        getattr(metrics, metric_name).labels.return_value = label_gauge
-
-    tailer = runner_module.JsonlTailer(tmp_path / "stdout.jsonl", metrics)
+    tailer = runner_module.JsonlTailer(tmp_path / "stdout.jsonl", metrics, 10)
 
     payload = {
         "id": 7,
@@ -173,12 +163,62 @@ def test_publish_updates_metric_values(runner_module: ModuleType, tmp_path: Path
 
     tailer._publish(payload)
 
+    metrics.add_benchmark_sample.assert_called_once_with(payload)
+
+
+def test_add_benchmark_sample_updates_all_metrics(runner_module: ModuleType) -> None:
+    """add_benchmark_sample should update scalar, cumulative and op-specific metrics."""
+    gauge_mocks = [MagicMock() for _ in range(9)]
+    counter_mocks = [MagicMock() for _ in range(5)]
+
+    with (
+        patch.object(runner_module, "Gauge", side_effect=gauge_mocks),
+        patch.object(runner_module, "Counter", side_effect=counter_mocks),
+    ):
+        metrics = runner_module.BenchmarkMetrics(test_id="test-1")
+
+    payload = {
+        "id": 7,
+        "ts": "2026-04-30T12:00:00Z",
+        "elapsed_sec": 5,
+        "read": {
+            "ops": 10,
+            "avg": 0.1,
+            "stddev": 0.01,
+            "rps": 100,
+            "p50": 0.05,
+            "p90": 0.09,
+            "p99": 0.12,
+        },
+        "write": {
+            "ops": 20,
+            "avg": 0.2,
+            "stddev": 0.02,
+            "rps": 200,
+            "p50": 0.15,
+            "p90": 0.19,
+            "p99": 0.22,
+        },
+    }
+
+    metrics.add_benchmark_sample(payload)
+
     metrics.iteration.labels.assert_called_once_with("test-1")
-    metrics.iteration.labels.return_value.set.assert_called_once_with(7)
+    metrics.iteration.labels.return_value.set.assert_called_once_with(7.0)
     metrics.last_ts.labels.assert_called_once_with("test-1")
     metrics.last_ts.labels.return_value.set.assert_called_once()
+
+    metrics.total_elapsed.labels.assert_called_once_with("test-1")
+    metrics.total_elapsed.labels.return_value.inc.assert_called_once_with(5.0)
+    metrics.total_read_ops.labels.assert_called_once_with("test-1")
+    metrics.total_read_ops.labels.return_value.inc.assert_called_once_with(10.0)
+    metrics.total_write_ops.labels.assert_called_once_with("test-1")
+    metrics.total_write_ops.labels.return_value.inc.assert_called_once_with(20.0)
+
     assert metrics.total_ops.labels.call_count == 2
     assert metrics.avg_latency.labels.call_count == 2
+    assert metrics.stddev_latency.labels.call_count == 2
+    assert metrics.throughput.labels.call_count == 2
     assert metrics.latency_quantile.labels.call_count == 6
 
 
