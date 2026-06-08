@@ -98,17 +98,17 @@ config:
       default: 0
       type: int
       description: |
-        Duration of the test in seconds, at the end of which it must auto terminate. |
-        In case both are set, the test will terminate as per whichever condition is met sooner. |
-        If both are unset (default=0), the test goes on indefinitely until the `stop` action is run. |
+        Duration of the test in seconds, at the end of which it must auto terminate. 
+        In case both are set, the test will terminate as per whichever condition is met sooner. 
+        If both are unset (default=0), the test goes on indefinitely until the `stop` action is run. 
         Note that you can still use the `stop` action to terminate the test gracefully, ahead of time.
     total-transactions:
       default: 0
       type: int
       description: |
-        Total transactions to be run as part of a benchmark run, at the end of which test must auto terminate. |
-        In case both are set, the test will terminate as per whichever condition is met sooner. |
-        If both are unset (default=0), the test goes on indefinitely until the `stop` action is run. |
+        Total transactions to be run as part of a benchmark run, at the end of which test must auto terminate. 
+        In case both are set, the test will terminate as per whichever condition is met sooner. 
+        If both are unset (default=0), the test goes on indefinitely until the `stop` action is run. 
         Note that you can still use the `stop` action to terminate the test gracefully, ahead of time.
     rate:
       default: 0

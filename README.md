@@ -82,7 +82,7 @@ juju config charmed-etcd-benchmark-operator total-transactions=100000
 By default, it is set to 10 seconds.
 ```bash
 juju config charmed-etcd-benchmark-operator report-interval=30
-````
+```
 
 11. For a full list of config options, their implications and defaults, you can run the juju config command.
 A few examples are `test-name`, `rate`, `rw-ratio`, etc. which allow for further customization of the benchmark tests. 
@@ -118,4 +118,3 @@ juju debug-log --replay
 - [Contributing](CONTRIBUTING.md) <!-- or link to other contribution documentation -->
 
 - See the [Juju documentation](https://documentation.ubuntu.com/juju/3.6/howto/manage-charms/) for more information about developing and improving charms.
-Benchmark stderr

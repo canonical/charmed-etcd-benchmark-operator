@@ -79,6 +79,7 @@ class JsonlTailer:
         if self._inode is None or self._inode != stat.st_ino:
             self._inode = stat.st_ino
             self._position = 0
+            self._latest_id = -1
 
         # Detect truncation
         if stat.st_size < self._position:
@@ -88,6 +89,7 @@ class JsonlTailer:
             f.seek(self._position)
 
             while True:
+                pos = f.tell()
                 line = f.readline()
 
                 if not line:
@@ -95,6 +97,7 @@ class JsonlTailer:
 
                 # Handle partial line (no newline yet)
                 if not line.endswith("\n"):
+                    f.seek(pos)
                     break
 
                 line = line.strip()
