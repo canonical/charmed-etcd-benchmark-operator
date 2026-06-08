@@ -16,8 +16,8 @@ class WorkloadBase(ABC):
     """Base interface for workload operations."""
 
     @abstractmethod
-    def start(self) -> None:
-        """Start the workload service."""
+    def verify_workload_ready(self) -> None:
+        """Verify that the workload is available and ready."""
         pass
 
     @abstractmethod
@@ -45,16 +45,26 @@ class WorkloadBase(ABC):
         pass
 
     @abstractmethod
-    def start_service(self, template_dir: str, config: dict[str, Any]) -> None:
-        """Start the workload service."""
+    def start_benchmark(self, template_dir: str, config: dict[str, Any]) -> None:
+        """Start the systemd benchmark service."""
         pass
 
     @abstractmethod
-    def stop_service(self) -> None:
-        """Stop the workload service."""
+    def stop_benchmark(self) -> None:
+        """Stop the systemd benchmark service."""
         pass
 
     @abstractmethod
-    def is_running(self) -> bool:
+    def is_benchmark_running(self) -> bool:
         """Return whether the benchmark service is active."""
+        pass
+
+    @abstractmethod
+    def start_metrics_exporter(self, template_dir: str, config: dict[str, Any]) -> None:
+        """Start the metrics exporter service."""
+        pass
+
+    @abstractmethod
+    def stop_metrics_exporter(self) -> None:
+        """Stop the metrics exporter service."""
         pass

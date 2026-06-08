@@ -8,14 +8,19 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from subprocess import CalledProcessError
 from typing import TYPE_CHECKING
 
 import ops
-from charmlibs import snap, systemd
+from charmlibs import snap
 from ops import Object
 
-from common.exceptions import BenchmarkConfigurationError
+from common.exceptions import (
+    BenchmarkConfigurationError,
+    BenchmarkResultsParseError,
+    BenchmarkServiceError,
+    BenchmarkWorkloadError,
+    MetricsExporterServiceError,
+)
 from literals import (
     BENCHMARK_RUNNER_FILE_NAME,
     BENCHMARK_RUNNER_FILE_PATH,
@@ -75,13 +80,13 @@ class EtcdBenchmarkEvents(Object):
 
     def _on_start(self, event: ops.StartEvent) -> None:
         """Handle start event."""
-        self.charm.unit.status = ops.MaintenanceStatus("starting workload")
+        self.charm.unit.status = ops.MaintenanceStatus("running workload smoke-test")
 
         try:
-            self.charm.workload.start()
-        except CalledProcessError as e:
-            logger.error(f"Error starting workload: {e.stderr}")
-            self.charm.unit.status = ops.BlockedStatus("Error starting the workload")
+            self.charm.workload.verify_workload_ready()
+
+        except BenchmarkWorkloadError:
+            self.charm.unit.status = ops.BlockedStatus("Error with the workload")
             return
 
         self.charm.unit.status = ops.ActiveStatus()
@@ -90,7 +95,7 @@ class EtcdBenchmarkEvents(Object):
         """Handle run action event."""
         # Verify that it's not already running, and that etcd uris available.
 
-        if self.charm.workload.is_running():
+        if self.charm.workload.is_benchmark_running():
             event.set_results({"error": "A benchmark is already in progress"})
             detailed_error_str = (
                 "There is already a benchmark in progress. "
@@ -115,12 +120,17 @@ class EtcdBenchmarkEvents(Object):
 
         # setup test folder, metadata and results files, and then kick off the run
         try:
-            config = self.charm.etcd_benchmark_manager.setup_test()
+            benchmark_config = self.charm.etcd_benchmark_manager.setup_test()
 
-            self.charm.metrics_exporter_manager.start_metrics_exporter(config)
+            metrics_config = self.charm.metrics_exporter_manager.setup_metrics_exporter(
+                benchmark_config
+            )
+            self.charm.workload.start_metrics_exporter(
+                f"{os.environ.get('CHARM_DIR', '')}/templates", metrics_config
+            )
 
-            self.charm.workload.start_service(
-                f"{os.environ.get('CHARM_DIR', '')}/templates", config
+            self.charm.workload.start_benchmark(
+                f"{os.environ.get('CHARM_DIR', '')}/templates", benchmark_config
             )
 
             event.set_results(
@@ -134,18 +144,17 @@ class EtcdBenchmarkEvents(Object):
                 }
             )
 
-        except BenchmarkConfigurationError as e:
+        except (
+            BenchmarkConfigurationError,
+            BenchmarkServiceError,
+            MetricsExporterServiceError,
+        ) as e:
             event.set_results({"error": e.message})
             event.fail(e.detailed_description)
-        except systemd.SystemdError:
-            event.set_results(
-                {"error": "Internal charm error starting benchmark service / metrics exporter"}
-            )
-            event.fail("Internal charm error starting benchmark service / metrics exporter")
 
     def _on_stop_action(self, event: ops.ActionEvent) -> None:
         """Handle stop action event."""
-        if not self.charm.workload.is_running():
+        if not self.charm.workload.is_benchmark_running():
             event.set_results({"error": "no active benchmark to stop"})
             detailed_error_str = (
                 "There is no active benchmark to stop. Use the 'run' action to start a benchmark."
@@ -155,9 +164,9 @@ class EtcdBenchmarkEvents(Object):
             return
 
         try:
-            self.charm.workload.stop_service()
+            self.charm.workload.stop_benchmark()
 
-            self.charm.metrics_exporter_manager.stop_metrics_exporter()
+            self.charm.workload.stop_metrics_exporter()
 
             event.set_results(
                 {
@@ -168,11 +177,9 @@ class EtcdBenchmarkEvents(Object):
                     )
                 }
             )
-        except systemd.SystemdError:
-            event.set_results(
-                {"error": "Internal charm error stopping benchmark service / metrics exporter"}
-            )
-            event.fail("Internal charm error stopping benchmark service / metrics exporter")
+        except (BenchmarkServiceError, MetricsExporterServiceError) as e:
+            event.set_results({"error": e.message})
+            event.fail(e.detailed_description)
 
     def _on_list_tests_action(self, event: ops.ActionEvent) -> None:
         """Handle list-tests action event."""
@@ -199,13 +206,10 @@ class EtcdBenchmarkEvents(Object):
             logger.error(detailed_error_str)
             return
 
-        error_str = "Error preparing/writing summary"
-
         try:
             summary = self.charm.etcd_benchmark_manager.get_test_summary(test_folder)
             event.set_results({"results": summary})
-        except (OSError, ValueError, KeyError) as e:
-            logger.error(f"{error_str}: {e}")
-            event.set_results({"error": f"{error_str}: {e}"})
-            event.fail(f"{error_str}: {e}")
+        except BenchmarkResultsParseError as e:
+            event.set_results({"error": e.message})
+            event.fail(e.detailed_description)
             return

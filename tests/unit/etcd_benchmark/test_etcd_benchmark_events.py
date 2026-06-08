@@ -7,12 +7,15 @@
 from unittest.mock import PropertyMock, patch
 
 import pytest
-from charmlibs import systemd
 from ops import testing
 from ops._private.harness import ActionFailed
 
 from charm import CharmedEtcdBenchmarkOperatorCharm
-from common.exceptions import BenchmarkConfigurationError
+from common.exceptions import (
+    BenchmarkConfigurationError,
+    BenchmarkResultsParseError,
+    BenchmarkServiceError,
+)
 from literals import BENCHMARK_TESTS_ROOT_DIR
 
 
@@ -29,7 +32,7 @@ def test_stop_action_fails_when_no_active_benchmark(caplog):
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
     state_in = testing.State()
 
-    with patch("workload.EtcdBenchmarkWorkload.is_running", return_value=False):
+    with patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False):
         with caplog.at_level("ERROR"):
             with pytest.raises(ActionFailed) as e:
                 ctx.run(ctx.on.action("stop"), state_in)
@@ -45,15 +48,13 @@ def test_stop_action_stops_benchmark_and_exporter():
     state_in = testing.State()
 
     with (
-        patch("workload.EtcdBenchmarkWorkload.is_running", return_value=True),
-        patch("workload.EtcdBenchmarkWorkload.stop_service") as stop_service,
-        patch(
-            "managers.metrics_exporter.MetricsExporterManager.stop_metrics_exporter"
-        ) as stop_exporter,
+        patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=True),
+        patch("workload.EtcdBenchmarkWorkload.stop_benchmark") as stop_benchmark,
+        patch("workload.EtcdBenchmarkWorkload.stop_metrics_exporter") as stop_exporter,
     ):
         ctx.run(ctx.on.action("stop"), state_in)
 
-    stop_service.assert_called_once_with()
+    stop_benchmark.assert_called_once_with()
     stop_exporter.assert_called_once_with()
     assert ctx.action_results is not None
     assert "Successfully signalled stop of current run." in ctx.action_results["results"]
@@ -65,19 +66,20 @@ def test_stop_action_fails_when_systemd_raises():
     state_in = testing.State()
 
     with (
-        patch("workload.EtcdBenchmarkWorkload.is_running", return_value=True),
+        patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=True),
         patch(
-            "workload.EtcdBenchmarkWorkload.stop_service",
-            side_effect=systemd.SystemdError("failed"),
+            "workload.EtcdBenchmarkWorkload.stop_benchmark",
+            side_effect=BenchmarkServiceError(
+                message="Benchmark service could not be stopped cleanly",
+                detailed_description="Error stopping benchmark service: failed",
+            ),
         ),
     ):
         with pytest.raises(ActionFailed) as e:
             ctx.run(ctx.on.action("stop"), state_in)
 
-    assert "Internal charm error stopping benchmark service / metrics exporter" in str(e.value)
-    assert ctx.action_results == {
-        "error": "Internal charm error stopping benchmark service / metrics exporter"
-    }
+    assert "Error stopping benchmark service: failed" in str(e.value)
+    assert ctx.action_results == {"error": "Benchmark service could not be stopped cleanly"}
 
 
 def test_list_tests_action_returns_no_tests_message():
@@ -153,22 +155,28 @@ def test_get_summary_action_returns_summary():
     assert ctx.action_results == {"results": "summary output"}
 
 
-@pytest.mark.parametrize("error", [OSError("io"), ValueError("bad"), KeyError("missing")])
-def test_get_summary_action_fails_when_summary_generation_errors(error, caplog):
-    """get-summary should fail with explicit errors when summary generation crashes."""
+def test_get_summary_action_fails_when_summary_generation_errors(caplog):
+    """get-summary should fail when summary parsing raises BenchmarkResultsParseError."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
     state_in = testing.State()
 
+    parse_error = BenchmarkResultsParseError(
+        message="Error preparing/writing summary",
+        detailed_description="Error preparing/writing summary: io",
+    )
+
     with (
         patch("workload.EtcdBenchmarkWorkload.file_exists", return_value=True),
-        patch("managers.etcd_benchmark.EtcdBenchmarkManager.get_test_summary", side_effect=error),
+        patch(
+            "managers.etcd_benchmark.EtcdBenchmarkManager.get_test_summary",
+            side_effect=parse_error,
+        ),
     ):
         with caplog.at_level("ERROR"):
             with pytest.raises(ActionFailed) as e:
                 ctx.run(ctx.on.action("get-summary", params={"test-id": "test-1"}), state_in)
 
     assert "Error preparing/writing summary" in str(e.value)
-    assert "Error preparing/writing summary" in caplog.text
 
 
 def test_run_action_fails_on_benchmark_configuration_error():
@@ -182,7 +190,7 @@ def test_run_action_fails_on_benchmark_configuration_error():
     )
 
     with (
-        patch("workload.EtcdBenchmarkWorkload.is_running", return_value=False),
+        patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False),
         patch(
             "core.interfaces.EtcdInterfaceState.relation",
             new_callable=PropertyMock,

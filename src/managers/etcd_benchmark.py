@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from ops import Object
 
-from common.exceptions import BenchmarkConfigurationError
+from common.exceptions import BenchmarkConfigurationError, BenchmarkResultsParseError
 from core.models import BenchmarkMetadata
 from literals import (
     BENCHMARK_TESTS_ROOT_DIR,
@@ -57,7 +57,7 @@ class EtcdBenchmarkManager(Object):
         started_at = datetime.now(UTC)
         test_id = generate_test_id(started_at)
 
-        config = self.charm.config_manager.get_charm_config()
+        config = self._retrieve_config()
 
         if config.get("report_interval", 10) < 1:
             detailed_error_str = "`report-interval` must be set to an integer >= 1."
@@ -116,17 +116,44 @@ class EtcdBenchmarkManager(Object):
         # if summary.json exists, return this JSON.
         # Else, prepare summary afresh.
 
-        summary_path = Path(test_dir) / SUMMARY_JSON_FILE_NAME
-        if self.charm.workload.file_exists(summary_path):
-            try:
-                return json.dumps(json.loads(summary_path.read_text(encoding="utf-8")), indent=2)
-            except (ValueError, OSError):
-                logger.warning(
-                    "summary.json at %s malformed; preparing summary from stdout.jsonl.",
-                    summary_path,
-                )
+        try:
+            summary_path = Path(test_dir) / SUMMARY_JSON_FILE_NAME
+            if self.charm.workload.file_exists(summary_path):
+                try:
+                    return json.dumps(
+                        json.loads(summary_path.read_text(encoding="utf-8")), indent=2
+                    )
+                except (ValueError, OSError):
+                    logger.warning(
+                        "summary.json at %s malformed; preparing summary from stdout.jsonl.",
+                        summary_path,
+                    )
 
-        return self._prepare_and_write_summary(test_dir)
+            return self._prepare_and_write_summary(test_dir)
+        except (OSError, ValueError, KeyError) as e:
+            error_str = "Error preparing/writing summary"
+            logger.error(f"{error_str}: {e}")
+            raise BenchmarkResultsParseError(
+                message=error_str, detailed_description=f"{error_str}: {e}"
+            )
+
+    def _retrieve_config(self) -> dict[str, Any]:
+        """Read current charm config."""
+        config = self.charm.config
+
+        return {
+            "clients": config.get("clients"),
+            "connections": config.get("connections"),
+            "rate": config.get("rate"),
+            "key_size": config.get("key-size"),
+            "key_space_size": config.get("key-space-size"),
+            "value_size": config.get("value-size"),
+            "limit": config.get("limit"),
+            "rw_ratio": config.get("rw-ratio"),
+            "duration": config.get("duration"),
+            "total_transactions": config.get("total-transactions"),
+            "report_interval": config.get("report-interval"),
+        }
 
     def _create_initial_test_artifacts(self, benchmark_metadata: BenchmarkMetadata) -> str:
         """Create filesystem artifacts for a newly started benchmark.

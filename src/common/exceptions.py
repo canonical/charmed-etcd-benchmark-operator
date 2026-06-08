@@ -10,5 +10,21 @@ class BenchmarkError(Exception):
         super().__init__(message)
 
 
+class BenchmarkWorkloadError(BenchmarkError):
+    """Raised when there is an error with the charm workload, i.e. benchmark tool."""
+
+
 class BenchmarkConfigurationError(BenchmarkError):
     """Raised when invalid configurations are detected."""
+
+
+class BenchmarkServiceError(BenchmarkError):
+    """Raised when there is an error running the benchmark service."""
+
+
+class MetricsExporterServiceError(BenchmarkError):
+    """Raised when there is an error running the benchmark metrics exporter service."""
+
+
+class BenchmarkResultsParseError(BenchmarkError):
+    """Raised when there is an error parsing the benchmark results file."""

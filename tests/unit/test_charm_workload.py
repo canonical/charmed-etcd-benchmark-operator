@@ -15,13 +15,24 @@ from ops import testing
 from ops._private.harness import ActionFailed
 
 from charm import CharmedEtcdBenchmarkOperatorCharm
+from common.exceptions import (
+    BenchmarkServiceError,
+    BenchmarkWorkloadError,
+    MetricsExporterServiceError,
+)
 from literals import (
     BENCHMARK_SERVICE_NAME,
     BENCHMARK_TEMPLATE_FILE_NAME,
+    METRICS_EXPORTER_SERVICE_NAME,
+    METRICS_EXPORTER_TEMPLATE_FILE_NAME,
     SNAP_CHANNEL,
     SNAP_NAME,
 )
-from workload import EtcdBenchmarkWorkload, _render_service
+from workload import (
+    EtcdBenchmarkWorkload,
+    _render_benchmark_service,
+    _render_metrics_exporter_service,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -160,7 +171,7 @@ def test_start_failure():
         capture_output=True,
         check=True,
     )
-    assert state_out.unit_status == ops.BlockedStatus("Error starting the workload")
+    assert state_out.unit_status == ops.BlockedStatus("Error with the workload")
 
 
 # Hook tests: run action
@@ -171,7 +182,7 @@ def test_run_action_fails_when_already_running():
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
     state_in = testing.State()
 
-    with patch("workload.EtcdBenchmarkWorkload.is_running", return_value=True):
+    with patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=True):
         with pytest.raises(ActionFailed) as e:
             ctx.run(ctx.on.action("run"), state_in)
 
@@ -185,7 +196,7 @@ def test_run_action_fails_without_relation():
     state_in = testing.State()
 
     with (
-        patch("workload.EtcdBenchmarkWorkload.is_running", return_value=False),
+        patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False),
         patch(
             "core.interfaces.EtcdInterfaceState.relation",
             new_callable=PropertyMock,
@@ -207,10 +218,17 @@ def test_run_action_success():
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
     state_in = testing.State()
 
-    config = {"results_dir": "/tmp/results", "some": "config"}
+    benchmark_config = {"results_dir": "/tmp/results", "some": "config"}
+    metrics_config = {
+        "jsonl_path": "/tmp/results/stdout.jsonl",
+        "test_id": "test-1",
+        "metrics_port": "9100",
+        "python_bin": "/tmp/charm/venv/bin/python",
+        "runner_path": "/usr/local/bin/benchmark_metrics_exporter.py",
+    }
 
     with (
-        patch("workload.EtcdBenchmarkWorkload.is_running", return_value=False),
+        patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False),
         patch(
             "core.interfaces.EtcdInterfaceState.relation",
             new_callable=PropertyMock,
@@ -222,33 +240,40 @@ def test_run_action_success():
             return_value="https://10.0.0.1:2379",
         ),
         patch(
-            "managers.etcd_benchmark.EtcdBenchmarkManager.setup_test", return_value=config
+            "managers.etcd_benchmark.EtcdBenchmarkManager.setup_test",
+            return_value=benchmark_config,
         ) as setup_test,
         patch(
-            "managers.metrics_exporter.MetricsExporterManager.start_metrics_exporter"
-        ) as start_exporter,
-        patch("workload.EtcdBenchmarkWorkload.start_service") as start_service,
+            "managers.metrics_exporter.MetricsExporterManager.setup_metrics_exporter",
+            return_value=metrics_config,
+        ) as setup_exporter,
+        patch("workload.EtcdBenchmarkWorkload.start_metrics_exporter") as start_exporter,
+        patch("workload.EtcdBenchmarkWorkload.start_benchmark") as start_benchmark,
         patch.dict("os.environ", {"CHARM_DIR": "/tmp/charm"}),
     ):
         ctx.run(ctx.on.action("run"), state_in)
 
     setup_test.assert_called_once_with()
-    start_exporter.assert_called_once_with(config)
-    start_service.assert_called_once_with(
+    setup_exporter.assert_called_once_with(benchmark_config)
+    start_exporter.assert_called_once_with(
         "/tmp/charm/templates",
-        config,
+        metrics_config,
+    )
+    start_benchmark.assert_called_once_with(
+        "/tmp/charm/templates",
+        benchmark_config,
     )
     assert ctx.action_results is not None
     assert "Benchmark started successfully." in ctx.action_results["results"]
 
 
 def test_run_action_fails_when_start_service_raises_systemd_error():
-    """Run action should fail with clear error when service startup fails."""
+    """Run action should fail with clear error when benchmark startup fails."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
     state_in = testing.State()
 
     with (
-        patch("workload.EtcdBenchmarkWorkload.is_running", return_value=False),
+        patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False),
         patch(
             "core.interfaces.EtcdInterfaceState.relation",
             new_callable=PropertyMock,
@@ -263,19 +288,24 @@ def test_run_action_fails_when_start_service_raises_systemd_error():
             "managers.etcd_benchmark.EtcdBenchmarkManager.setup_test",
             return_value={"results_dir": "/tmp/results"},
         ),
-        patch("managers.metrics_exporter.MetricsExporterManager.start_metrics_exporter"),
         patch(
-            "workload.EtcdBenchmarkWorkload.start_service",
-            side_effect=systemd.SystemdError("failed"),
+            "managers.metrics_exporter.MetricsExporterManager.setup_metrics_exporter",
+            return_value={"jsonl_path": "/tmp/results/stdout.jsonl"},
+        ),
+        patch("workload.EtcdBenchmarkWorkload.start_metrics_exporter"),
+        patch(
+            "workload.EtcdBenchmarkWorkload.start_benchmark",
+            side_effect=BenchmarkServiceError(
+                message="Benchmark service could not be started cleanly",
+                detailed_description="Error starting benchmark service: failed",
+            ),
         ),
     ):
         with pytest.raises(ActionFailed) as e:
             ctx.run(ctx.on.action("run"), state_in)
 
-    assert "Internal charm error starting benchmark service / metrics exporter" in str(e.value)
-    assert ctx.action_results == {
-        "error": "Internal charm error starting benchmark service / metrics exporter"
-    }
+    assert "Error starting benchmark service: failed" in str(e.value)
+    assert ctx.action_results == {"error": "Benchmark service could not be started cleanly"}
 
 
 # Direct workload tests: file utilities
@@ -341,10 +371,29 @@ def test_render_service_writes_file_and_reloads_systemd(tmp_path):
         ) as render,
         patch("workload.systemd.daemon_reload") as daemon_reload,
     ):
-        _render_service("/tmp/templates", config)
+        _render_benchmark_service("/tmp/templates", config)
 
     render.assert_called_once_with(Path(f"/tmp/templates/{BENCHMARK_TEMPLATE_FILE_NAME}"), config)
     assert service_file.read_text() == "[Unit]\nDescription=benchmark\n"
+    daemon_reload.assert_called_once_with()
+
+
+def test_render_metrics_exporter_service_writes_file_and_reloads_systemd(tmp_path):
+    """_render_metrics_exporter_service should render, write, and reload systemd."""
+    service_file = tmp_path / "metrics-exporter.service"
+    config = {"k": "v"}
+
+    with (
+        patch("workload.METRICS_EXPORTER_SERVICE_FILE_PATH", str(service_file)),
+        patch("workload.render_template", return_value="[Unit]\nDescription=metrics\n") as render,
+        patch("workload.systemd.daemon_reload") as daemon_reload,
+    ):
+        _render_metrics_exporter_service("/tmp/templates", config)
+
+    render.assert_called_once_with(
+        Path(f"/tmp/templates/{METRICS_EXPORTER_TEMPLATE_FILE_NAME}"), config
+    )
+    assert service_file.read_text() == "[Unit]\nDescription=metrics\n"
     daemon_reload.assert_called_once_with()
 
 
@@ -356,7 +405,7 @@ def test_workload_start_runs_help_check(workload):
     with patch("workload.subprocess.run") as mock_run:
         mock_run.return_value.stdout = b"help output"
 
-        workload.start()
+        workload.verify_workload_ready()
 
     mock_run.assert_called_once_with(
         [f"{SNAP_NAME}.benchmark", "--help"],
@@ -368,11 +417,11 @@ def test_workload_start_runs_help_check(workload):
 def test_start_service_renders_and_enables_service(workload):
     """start_service should render and start the benchmark systemd unit."""
     with (
-        patch("workload._render_service") as render,
+        patch("workload._render_benchmark_service") as render,
         patch("workload.systemd.service_enable") as enable,
         patch("workload.systemd.service_start") as start,
     ):
-        workload.start_service(template_dir="/tmp/templates", config={"a": 1})
+        workload.start_benchmark(template_dir="/tmp/templates", config={"a": 1})
 
     render.assert_called_once_with("/tmp/templates", {"a": 1})
     enable.assert_called_once_with(BENCHMARK_SERVICE_NAME)
@@ -382,21 +431,23 @@ def test_start_service_renders_and_enables_service(workload):
 def test_start_service_raises_when_systemd_fails(workload):
     """start_service should re-raise systemd errors for caller handling."""
     with (
-        patch("workload._render_service"),
+        patch("workload._render_benchmark_service"),
         patch("workload.systemd.service_enable", side_effect=systemd.SystemdError("failed")),
     ):
-        with pytest.raises(systemd.SystemdError):
-            workload.start_service(template_dir="/tmp/templates", config={})
+        with pytest.raises(BenchmarkServiceError) as e:
+            workload.start_benchmark(template_dir="/tmp/templates", config={})
+
+    assert e.value.message == "Benchmark service could not be started cleanly"
 
 
 def test_stop_service_returns_early_when_not_running(workload):
     """stop_service should no-op when service is already inactive."""
     with (
-        patch.object(workload, "is_running", return_value=False),
+        patch.object(workload, "is_benchmark_running", return_value=False),
         patch("workload.systemd.service_stop") as stop,
         patch("workload.systemd.service_disable") as disable,
     ):
-        workload.stop_service()
+        workload.stop_benchmark()
 
     stop.assert_not_called()
     disable.assert_not_called()
@@ -405,11 +456,11 @@ def test_stop_service_returns_early_when_not_running(workload):
 def test_stop_service_stops_and_disables_when_running(workload):
     """stop_service should stop and disable the service when active."""
     with (
-        patch.object(workload, "is_running", return_value=True),
+        patch.object(workload, "is_benchmark_running", return_value=True),
         patch("workload.systemd.service_stop") as stop,
         patch("workload.systemd.service_disable") as disable,
     ):
-        workload.stop_service()
+        workload.stop_benchmark()
 
     stop.assert_called_once_with(BENCHMARK_SERVICE_NAME)
     disable.assert_called_once_with(BENCHMARK_SERVICE_NAME)
@@ -418,20 +469,81 @@ def test_stop_service_stops_and_disables_when_running(workload):
 def test_stop_service_raises_when_systemd_fails(workload):
     """stop_service should re-raise systemd errors for caller handling."""
     with (
-        patch.object(workload, "is_running", return_value=True),
+        patch.object(workload, "is_benchmark_running", return_value=True),
         patch("workload.systemd.service_stop", side_effect=systemd.SystemdError("failed")),
     ):
-        with pytest.raises(systemd.SystemdError):
-            workload.stop_service()
+        with pytest.raises(BenchmarkServiceError) as e:
+            workload.stop_benchmark()
+
+    assert e.value.message == "Benchmark service could not be stopped cleanly"
 
 
 def test_is_running_returns_true_when_service_is_active(workload):
     """is_running should return true when systemd reports active."""
     with patch("workload.systemd.service_running", return_value=True):
-        assert workload.is_running() is True
+        assert workload.is_benchmark_running() is True
 
 
 def test_is_running_returns_false_on_systemd_error(workload):
     """is_running should return false when service query raises."""
     with patch("workload.systemd.service_running", side_effect=systemd.SystemdError("failed")):
-        assert workload.is_running() is False
+        assert workload.is_benchmark_running() is False
+
+
+def test_start_metrics_exporter_renders_and_starts_service(workload):
+    """start_metrics_exporter should render and start metrics exporter systemd unit."""
+    with (
+        patch("workload._render_metrics_exporter_service") as render,
+        patch("workload.systemd.service_enable") as enable,
+        patch("workload.systemd.service_start") as start,
+    ):
+        workload.start_metrics_exporter(template_dir="/tmp/templates", config={"a": 1})
+
+    render.assert_called_once_with("/tmp/templates", {"a": 1})
+    enable.assert_called_once_with(METRICS_EXPORTER_SERVICE_NAME)
+    start.assert_called_once_with(METRICS_EXPORTER_SERVICE_NAME)
+
+
+def test_start_metrics_exporter_raises_when_systemd_fails(workload):
+    """start_metrics_exporter should raise MetricsExporterServiceError on systemd failure."""
+    with (
+        patch("workload._render_metrics_exporter_service"),
+        patch("workload.systemd.service_enable", side_effect=systemd.SystemdError("failed")),
+    ):
+        with pytest.raises(MetricsExporterServiceError) as e:
+            workload.start_metrics_exporter(template_dir="/tmp/templates", config={})
+
+    assert e.value.message == "Metrics exporter service could not be started cleanly"
+
+
+def test_stop_metrics_exporter_stops_and_disables_service(workload):
+    """stop_metrics_exporter should stop and disable metrics exporter service."""
+    with (
+        patch("workload.systemd.service_stop") as stop,
+        patch("workload.systemd.service_disable") as disable,
+    ):
+        workload.stop_metrics_exporter()
+
+    stop.assert_called_once_with(METRICS_EXPORTER_SERVICE_NAME)
+    disable.assert_called_once_with(METRICS_EXPORTER_SERVICE_NAME)
+
+
+def test_stop_metrics_exporter_raises_when_systemd_fails(workload):
+    """stop_metrics_exporter should raise MetricsExporterServiceError on systemd failure."""
+    with patch("workload.systemd.service_stop", side_effect=systemd.SystemdError("failed")):
+        with pytest.raises(MetricsExporterServiceError) as e:
+            workload.stop_metrics_exporter()
+
+    assert e.value.message == "Metrics exporter service could not be stopped cleanly"
+
+
+def test_verify_workload_ready_raises_benchmark_workload_error(workload):
+    """verify_workload_ready should wrap subprocess failures in BenchmarkWorkloadError."""
+    with patch(
+        "workload.subprocess.run",
+        side_effect=CalledProcessError(1, [f"{SNAP_NAME}.benchmark", "--help"]),
+    ):
+        with pytest.raises(BenchmarkWorkloadError) as e:
+            workload.verify_workload_ready()
+
+    assert e.value.message == "Error verifying benchmark tool"

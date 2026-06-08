@@ -13,7 +13,11 @@ import pytest
 
 from common.exceptions import BenchmarkConfigurationError
 from core.models import BenchmarkMetadata
-from literals import METADATA_JSON_FILE_NAME, SUMMARY_JSON_FILE_NAME, TEST_RESULTS_DIR_NAME
+from literals import (
+    METADATA_JSON_FILE_NAME,
+    SUMMARY_JSON_FILE_NAME,
+    TEST_RESULTS_DIR_NAME,
+)
 from managers.etcd_benchmark import EtcdBenchmarkManager
 
 
@@ -21,7 +25,6 @@ def _make_etcd_benchmark_manager():
     """Create an EtcdBenchmarkManager with a mocked charm."""
     charm = MagicMock()
     charm.workload = MagicMock()
-    charm.config_manager = MagicMock()
     charm.etcd_interface_state = MagicMock()
     charm.config = {}
     return EtcdBenchmarkManager(charm), charm
@@ -32,10 +35,10 @@ def test_setup_test_returns_enriched_config():
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
 
     charm.etcd_interface_state.uris = "https://10.0.0.1:2379"
-    charm.config = {"test-name": "smoke-test"}
-    charm.config_manager.get_charm_config.return_value = {
+    charm.config = {
+        "test-name": "smoke-test",
         "clients": 1,
-        "report_interval": 10,
+        "report-interval": 10,
     }
 
     with (
@@ -65,7 +68,7 @@ def test_setup_test_raises_on_invalid_report_interval():
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
 
     charm.etcd_interface_state.uris = "https://10.0.0.1:2379"
-    charm.config_manager.get_charm_config.return_value = {"report_interval": 0}
+    charm.config = {"test-name": "bad-config", "report-interval": 0}
 
     with pytest.raises(BenchmarkConfigurationError) as e:
         etcd_benchmark_manager.setup_test()
@@ -157,6 +160,57 @@ def test_get_test_summary_falls_back_when_cached_summary_is_malformed(tmp_path):
     assert summary == "rebuilt-summary"
 
 
+def test_get_test_summary_wraps_errors_from_prepare_summary(tmp_path):
+    """get_test_summary should wrap OSError/ValueError/KeyError into BenchmarkResultsParseError."""
+    from common.exceptions import BenchmarkResultsParseError
+
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    test_dir = tmp_path / "test-wrap"
+    test_dir.mkdir(parents=True)
+
+    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+
+    with patch.object(
+        etcd_benchmark_manager,
+        "_prepare_and_write_summary",
+        side_effect=OSError("disk io failed"),
+    ):
+        with pytest.raises(BenchmarkResultsParseError) as e:
+            etcd_benchmark_manager.get_test_summary(str(test_dir))
+
+    assert e.value.message == "Error preparing/writing summary"
+    assert "disk io failed" in e.value.detailed_description
+
+
+def test_create_initial_test_artifacts_writes_metadata_and_result_files(tmp_path):
+    """_create_initial_test_artifacts should write metadata and both result output files."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    metadata = BenchmarkMetadata(
+        test_id="test-artifacts",
+        test_name="artifact-test",
+        started_at=datetime.now(UTC),
+        test_config={"clients": 1},
+        is_active=True,
+    )
+
+    with patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)):
+        results_dir = etcd_benchmark_manager._create_initial_test_artifacts(metadata)
+
+    expected_test_dir = tmp_path / "test-artifacts"
+    assert results_dir == str(expected_test_dir / TEST_RESULTS_DIR_NAME)
+    assert charm.workload.write_file.call_count == 3
+    charm.workload.write_file.assert_any_call(
+        file=str(expected_test_dir / METADATA_JSON_FILE_NAME),
+        content=json.dumps(metadata.to_dict(), indent=2) + "\n",
+    )
+    charm.workload.write_file.assert_any_call(
+        file=str(expected_test_dir / TEST_RESULTS_DIR_NAME / "stdout.jsonl"),
+    )
+    charm.workload.write_file.assert_any_call(
+        file=str(expected_test_dir / TEST_RESULTS_DIR_NAME / "stderr.log"),
+    )
+
+
 def test_prepare_and_write_summary_fails_when_metadata_missing(tmp_path):
     """_prepare_and_write_summary should fail when metadata is missing."""
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
@@ -223,8 +277,11 @@ def test_setup_test_includes_cert_paths_in_config():
 
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
     charm.etcd_interface_state.uris = "https://10.0.0.1:2379"
-    charm.config = {"test-name": "tls-test"}
-    charm.config_manager.get_charm_config.return_value = {"clients": 1, "report_interval": 5}
+    charm.config = {
+        "test-name": "tls-test",
+        "clients": 1,
+        "report-interval": 5,
+    }
 
     with (
         patch("managers.etcd_benchmark.generate_test_id", return_value="tid-tls"),
@@ -239,6 +296,60 @@ def test_setup_test_includes_cert_paths_in_config():
     assert config["client_cert_path"] == CLIENT_CERT_PATH
     assert config["client_key_path"] == CLIENT_KEY_PATH
     assert config["ca_cert_path"] == CA_CERT_PATH
+
+
+def test_retrieve_config_maps_all_expected_keys():
+    """_retrieve_config should map charm options to benchmark runner keys."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    charm.config = {
+        "clients": 10,
+        "connections": 20,
+        "rate": 30,
+        "key-size": 40,
+        "key-space-size": 50,
+        "value-size": 60,
+        "limit": 70,
+        "rw-ratio": 2.5,
+        "duration": 80,
+        "total-transactions": 90,
+        "report-interval": 15,
+        "test-name": "ignored",
+    }
+
+    assert etcd_benchmark_manager._retrieve_config() == {
+        "clients": 10,
+        "connections": 20,
+        "rate": 30,
+        "key_size": 40,
+        "key_space_size": 50,
+        "value_size": 60,
+        "limit": 70,
+        "rw_ratio": 2.5,
+        "duration": 80,
+        "total_transactions": 90,
+        "report_interval": 15,
+    }
+
+
+def test_retrieve_config_returns_none_for_missing_options():
+    """_retrieve_config should default missing options to None."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    charm.config = {"clients": 3, "rw-ratio": 1.0}
+
+    assert etcd_benchmark_manager._retrieve_config() == {
+        "clients": 3,
+        "connections": None,
+        "rate": None,
+        "key_size": None,
+        "key_space_size": None,
+        "value_size": None,
+        "limit": None,
+        "rw_ratio": 1.0,
+        "duration": None,
+        "total_transactions": None,
+        "report_interval": None,
+    }
 
 
 def test_list_tests_returns_unknown_status_when_metadata_is_malformed(tmp_path):
@@ -714,3 +825,55 @@ def test_aggregate_jsonl_results_aggregates_multiple_rows(tmp_path):
     assert aggregates["write"]["total_ops"] == 10
     # stddev_weight should be (ops-1) * number_of_rows = 9 * 2 = 18
     assert aggregates["read"]["stddev_weight"] == 18
+
+
+def test_aggregate_jsonl_results_skips_missing_op_metrics_and_still_aggregates(tmp_path):
+    """_aggregate_jsonl_results should skip missing op blocks and keep valid ones."""
+    etcd_benchmark_manager, _ = _make_etcd_benchmark_manager()
+
+    row = {
+        "read": {
+            "ops": 12,
+            "rps": 120.0,
+            "p50": 0.005,
+            "p90": 0.020,
+            "p99": 0.030,
+            "avg": 0.010,
+            "stddev": 0.001,
+        }
+    }
+    stdout_path = tmp_path / "stdout.jsonl"
+    stdout_path.write_text(json.dumps(row) + "\n")
+
+    aggregates = etcd_benchmark_manager._aggregate_jsonl_results(stdout_path)
+
+    assert "read" in aggregates
+    assert "write" not in aggregates
+    assert aggregates["read"]["samples"] == 1
+    assert aggregates["read"]["total_ops"] == 12
+
+
+def test_aggregate_jsonl_results_keeps_zero_stddev_weight_when_ops_is_one(tmp_path):
+    """_aggregate_jsonl_results should not accumulate stddev weight for single-op samples."""
+    etcd_benchmark_manager, _ = _make_etcd_benchmark_manager()
+
+    row = {
+        "read": {
+            "ops": 1,
+            "rps": 10.0,
+            "p50": 0.005,
+            "p90": 0.010,
+            "p99": 0.020,
+            "avg": 0.005,
+            "stddev": 0.123,
+        }
+    }
+    stdout_path = tmp_path / "stdout.jsonl"
+    stdout_path.write_text(json.dumps(row) + "\n")
+
+    aggregates = etcd_benchmark_manager._aggregate_jsonl_results(stdout_path)
+
+    assert aggregates["read"]["stddev_weight"] == 0
+    assert aggregates["read"]["stddev_accumulator"] == 0.0
+    assert aggregates["read"]["min_throughput"] == 10.0
+    assert aggregates["read"]["max_throughput"] == 10.0
