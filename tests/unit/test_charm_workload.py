@@ -180,7 +180,7 @@ def test_start_failure():
 def test_run_action_fails_when_already_running():
     """Run action should fail when a benchmark service is already running."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=True):
         with pytest.raises(ActionFailed) as e:
@@ -193,7 +193,7 @@ def test_run_action_fails_when_already_running():
 def test_run_action_fails_without_relation():
     """Run action should fail if the etcd relation is missing."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with (
         patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False),
@@ -216,7 +216,7 @@ def test_run_action_fails_without_relation():
 def test_run_action_success():
     """Run action should set up and start the benchmark service."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     benchmark_config = {"results_dir": "/tmp/results", "some": "config"}
     metrics_config = {
@@ -270,7 +270,7 @@ def test_run_action_success():
 def test_run_action_fails_when_start_service_raises_systemd_error():
     """Run action should fail with clear error when benchmark startup fails."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with (
         patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False),

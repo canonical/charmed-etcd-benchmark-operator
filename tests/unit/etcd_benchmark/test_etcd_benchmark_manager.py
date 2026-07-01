@@ -26,6 +26,9 @@ def _make_etcd_benchmark_manager():
     charm = MagicMock()
     charm.workload = MagicMock()
     charm.etcd_interface_state = MagicMock()
+    charm.cluster_state = MagicMock()
+    charm.cluster_state.get_all_test_metadata.return_value = {}
+    charm.cluster_state.get_test_metadata.return_value = None
     charm.config = {}
     return EtcdBenchmarkManager(charm), charm
 
@@ -52,10 +55,13 @@ def test_setup_test_returns_enriched_config():
         config = etcd_benchmark_manager.setup_test()
 
     create_artifacts.assert_called_once()
-    metadata = create_artifacts.call_args[0][0]
-    assert isinstance(metadata, BenchmarkMetadata)
-    assert metadata.test_id == "test-123"
-    assert metadata.test_name == "smoke-test"
+    charm.cluster_state.cluster.update.assert_called_once()
+    cluster_update = charm.cluster_state.cluster.update.call_args[0][0]
+    assert cluster_update["current_test_id"] == "test-123"
+    assert cluster_update["current_test_name"] == "smoke-test"
+    assert cluster_update["current_test_is_active"] is True
+    assert cluster_update["current_test_config"]["clients"] == 1
+    assert cluster_update["current_test_started_at"]
 
     assert config["current_test_id"] == "test-123"
     assert config["current_test_name"] == "smoke-test"
@@ -80,21 +86,13 @@ def test_list_tests_returns_empty_when_tests_dir_missing(tmp_path):
     """list_tests should return an empty list when tests root is absent."""
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
 
-    missing_dir = tmp_path / "does-not-exist"
-    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
-
-    assert etcd_benchmark_manager.list_tests(str(missing_dir)) == []
+    charm.cluster_state.get_all_test_metadata.return_value = {}
+    assert etcd_benchmark_manager.list_tests(str(tmp_path / "does-not-exist")) == []
 
 
 def test_list_tests_returns_status_from_metadata(tmp_path):
     """list_tests should classify tests as in progress or completed from metadata."""
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
-
-    tests_root = tmp_path / "tests"
-    test_1 = tests_root / "test-1"
-    test_2 = tests_root / "test-2"
-    test_1.mkdir(parents=True)
-    test_2.mkdir(parents=True)
 
     active_metadata = BenchmarkMetadata(
         test_id="test-2",
@@ -111,12 +109,12 @@ def test_list_tests_returns_status_from_metadata(tmp_path):
         is_active=False,
     )
 
-    (test_2 / METADATA_JSON_FILE_NAME).write_text(json.dumps(active_metadata.to_dict()))
-    (test_1 / METADATA_JSON_FILE_NAME).write_text(json.dumps(completed_metadata.to_dict()))
+    charm.cluster_state.get_all_test_metadata.return_value = {
+        "test-2": active_metadata,
+        "test-1": completed_metadata,
+    }
 
-    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
-
-    assert etcd_benchmark_manager.list_tests(str(tests_root)) == [
+    assert etcd_benchmark_manager.list_tests(str(tmp_path / "tests")) == [
         ("test-2", "in progress"),
         ("test-1", "completed"),
     ]
@@ -182,27 +180,81 @@ def test_get_test_summary_wraps_errors_from_prepare_summary(tmp_path):
     assert "disk io failed" in e.value.detailed_description
 
 
-def test_create_initial_test_artifacts_writes_metadata_and_result_files(tmp_path):
-    """_create_initial_test_artifacts should write metadata and both result output files."""
-    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+def test_write_metadata_to_summary_file_is_noop_when_metadata_exists(tmp_path):
+    """write_metadata_to_summary_file should not overwrite existing metadata."""
+    etcd_benchmark_manager, _ = _make_etcd_benchmark_manager()
+
+    test_dir = tmp_path / "test-1"
+    test_dir.mkdir(parents=True)
+    summary_path = test_dir / SUMMARY_JSON_FILE_NAME
+    summary_path.write_text(
+        json.dumps(
+            {
+                "metadata": {"test_id": "existing-test", "test_name": "existing"},
+                "operations": {"read": {"total_ops": 1}},
+            }
+        )
+    )
+
     metadata = BenchmarkMetadata(
-        test_id="test-artifacts",
-        test_name="artifact-test",
+        test_id="new-test",
+        test_name="new",
         started_at=datetime.now(UTC),
-        test_config={"clients": 1},
+        test_config={},
         is_active=True,
     )
 
+    with patch.object(
+        etcd_benchmark_manager,
+        "read_test_metadata_from_relation",
+        return_value=metadata,
+    ):
+        etcd_benchmark_manager.write_metadata_to_summary_file(str(test_dir))
+
+    saved_summary = json.loads(summary_path.read_text())
+    assert saved_summary["metadata"]["test_id"] == "existing-test"
+    assert saved_summary["operations"]["read"]["total_ops"] == 1
+
+
+def test_write_metadata_to_summary_file_writes_when_metadata_missing(tmp_path):
+    """write_metadata_to_summary_file should inject metadata when key is missing."""
+    etcd_benchmark_manager, _ = _make_etcd_benchmark_manager()
+
+    test_dir = tmp_path / "test-2"
+    test_dir.mkdir(parents=True)
+    summary_path = test_dir / SUMMARY_JSON_FILE_NAME
+    summary_path.write_text(json.dumps({"operations": {"write": {"total_ops": 2}}}))
+
+    metadata = BenchmarkMetadata(
+        test_id="test-2",
+        test_name="new-meta",
+        started_at=datetime.now(UTC),
+        test_config={"clients": 2},
+        is_active=True,
+    )
+
+    with patch.object(
+        etcd_benchmark_manager,
+        "read_test_metadata_from_relation",
+        return_value=metadata,
+    ):
+        etcd_benchmark_manager.write_metadata_to_summary_file(str(test_dir))
+
+    saved_summary = json.loads(summary_path.read_text())
+    assert saved_summary["metadata"]["test_id"] == "test-2"
+    assert saved_summary["operations"]["write"]["total_ops"] == 2
+
+
+def test_create_initial_test_artifacts_writes_metadata_and_result_files(tmp_path):
+    """_create_initial_test_artifacts should write both result output files."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
     with patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)):
-        results_dir = etcd_benchmark_manager._create_initial_test_artifacts(metadata)
+        results_dir = etcd_benchmark_manager._create_initial_test_artifacts("test-artifacts")
 
     expected_test_dir = tmp_path / "test-artifacts"
     assert results_dir == str(expected_test_dir / TEST_RESULTS_DIR_NAME)
-    assert charm.workload.write_file.call_count == 3
-    charm.workload.write_file.assert_any_call(
-        file=str(expected_test_dir / METADATA_JSON_FILE_NAME),
-        content=json.dumps(metadata.to_dict(), indent=2) + "\n",
-    )
+    assert charm.workload.write_file.call_count == 2
     charm.workload.write_file.assert_any_call(
         file=str(expected_test_dir / TEST_RESULTS_DIR_NAME / "stdout.jsonl"),
     )
@@ -223,7 +275,7 @@ def test_prepare_and_write_summary_fails_when_metadata_missing(tmp_path):
     with pytest.raises(FileNotFoundError) as e:
         etcd_benchmark_manager._prepare_and_write_summary(str(test_dir))
 
-    assert "Missing metadata file" in str(e.value)
+    assert "Missing metadata for test" in str(e.value)
 
 
 def test_parse_final_operations_from_stderr_parses_read_and_write_blocks(tmp_path):
@@ -352,33 +404,13 @@ def test_retrieve_config_returns_none_for_missing_options():
     }
 
 
-def test_list_tests_returns_unknown_status_when_metadata_is_malformed(tmp_path):
-    """list_tests should return 'unknown' status for a tets if metadata JSON is invalid."""
+def test_list_tests_ignores_malformed_metadata_in_peer_state(tmp_path):
+    """list_tests should ignore malformed metadata rows from peer state."""
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    charm.cluster_state.get_all_test_metadata.return_value = {}
 
-    tests_root = tmp_path / "tests"
-    test_dir = tests_root / "test-bad"
-    test_dir.mkdir(parents=True)
-    (test_dir / METADATA_JSON_FILE_NAME).write_text("{not valid json")
-
-    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
-
-    results = etcd_benchmark_manager.list_tests(str(tests_root))
-    assert results == [("test-bad", "unknown")]
-
-
-def test_list_tests_returns_unknown_status_when_metadata_is_absent(tmp_path):
-    """list_tests should return 'unknown' status when there is no metadata file."""
-    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
-
-    tests_root = tmp_path / "tests"
-    test_dir = tests_root / "test-no-meta"
-    test_dir.mkdir(parents=True)
-
-    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
-
-    results = etcd_benchmark_manager.list_tests(str(tests_root))
-    assert results == [("test-no-meta", "unknown")]
+    results = etcd_benchmark_manager.list_tests(str(tmp_path / "tests"))
+    assert results == []
 
 
 # ---------------------------------------------------------------------------

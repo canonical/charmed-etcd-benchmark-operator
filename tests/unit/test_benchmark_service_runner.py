@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import os
 import sys
 from pathlib import Path
@@ -141,56 +140,6 @@ def test_build_command_uses_explicit_total_transactions_when_set(
     assert command[total_idx + 1] == "500"
 
 
-# _mark_test_complete tests
-
-
-def test_mark_test_complete_sets_is_active_false(
-    runner_module: ModuleType, tmp_path: Path
-) -> None:
-    """_mark_test_complete should flip is_active to False in metadata.json."""
-    results_dir = tmp_path / "results"
-    results_dir.mkdir()
-    metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text(json.dumps({"is_active": True, "name": "bench"}), encoding="utf-8")
-
-    runner_module._mark_test_complete(str(results_dir))
-
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    assert metadata["is_active"] is False
-    assert metadata["name"] == "bench"
-
-
-def test_mark_test_complete_preserves_other_metadata_fields(
-    runner_module: ModuleType, tmp_path: Path
-) -> None:
-    """_mark_test_complete should preserve all existing fields beyond is_active."""
-    results_dir = tmp_path / "results"
-    results_dir.mkdir()
-    metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text(
-        json.dumps({"is_active": True, "test_id": "abc-123", "config": {"rate": 100}}),
-        encoding="utf-8",
-    )
-
-    runner_module._mark_test_complete(str(results_dir))
-
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    assert metadata["is_active"] is False
-    assert metadata["test_id"] == "abc-123"
-    assert metadata["config"] == {"rate": 100}
-
-
-def test_mark_test_complete_does_nothing_when_metadata_missing(
-    runner_module: ModuleType, tmp_path: Path
-) -> None:
-    """_mark_test_complete should log a warning and return when metadata.json is absent."""
-    results_dir = tmp_path / "results"
-    results_dir.mkdir()
-
-    # No metadata.json created — should not raise.
-    runner_module._mark_test_complete(str(results_dir))
-
-
 # _clear_benchmark_data tests
 
 
@@ -252,8 +201,6 @@ def _set_main_required_env(tmp_path: Path) -> dict[str, str]:
     results_dir.mkdir()
     (results_dir / "stdout.jsonl").write_text("", encoding="utf-8")
     (results_dir / "stderr.log").write_text("", encoding="utf-8")
-    (tmp_path / "metadata.json").write_text('{"is_active": true}\n', encoding="utf-8")
-
     return {
         "ETCD_BENCHMARK_RESULTS_DIR": str(results_dir),
         "ETCD_BENCHMARK_CURRENT_TEST_ID": "id-1",
@@ -277,8 +224,6 @@ def test_main_returns_error_when_test_id_missing(
     """Main should call _finalize_exit(1) when ETCD_BENCHMARK_CURRENT_TEST_ID is absent."""
     results_dir = tmp_path / "results"
     results_dir.mkdir()
-    (tmp_path / "metadata.json").write_text('{"is_active": true}\n', encoding="utf-8")
-
     env = {
         "ETCD_BENCHMARK_RESULTS_DIR": str(results_dir),
         "ETCD_BENCHMARK_CURRENT_TEST_NAME": "name-1",
@@ -287,7 +232,6 @@ def test_main_returns_error_when_test_id_missing(
         patch.dict(os.environ, env, clear=True),
         patch.object(runner_module.signal, "signal", lambda *_args, **_kwargs: None),
         patch.object(runner_module, "_clear_benchmark_data"),
-        patch.object(runner_module, "_mark_test_complete"),
     ):
         assert runner_module.main() == 1
 
@@ -298,8 +242,6 @@ def test_main_returns_error_when_test_name_missing(
     """Main should call _finalize_exit(1) when ETCD_BENCHMARK_CURRENT_TEST_NAME is absent."""
     results_dir = tmp_path / "results"
     results_dir.mkdir()
-    (tmp_path / "metadata.json").write_text('{"is_active": true}\n', encoding="utf-8")
-
     env = {
         "ETCD_BENCHMARK_RESULTS_DIR": str(results_dir),
         "ETCD_BENCHMARK_CURRENT_TEST_ID": "id-1",
@@ -308,7 +250,6 @@ def test_main_returns_error_when_test_name_missing(
         patch.dict(os.environ, env, clear=True),
         patch.object(runner_module.signal, "signal", lambda *_args, **_kwargs: None),
         patch.object(runner_module, "_clear_benchmark_data"),
-        patch.object(runner_module, "_mark_test_complete"),
     ):
         assert runner_module.main() == 1
 
@@ -329,11 +270,9 @@ def test_main_exits_when_duration_expired_before_iteration(
         patch.object(runner_module.signal, "signal", lambda *_args, **_kwargs: None),
         patch.object(runner_module.subprocess, "Popen") as popen_mock,
         patch.object(runner_module, "_clear_benchmark_data") as clear_mock,
-        patch.object(runner_module, "_mark_test_complete") as mark_mock,
     ):
         assert runner_module.main() == 0
         assert clear_mock.call_count == 1
-        assert mark_mock.call_count == 1
         assert popen_mock.call_count == 0
 
 
@@ -351,11 +290,9 @@ def test_main_returns_zero_when_process_exits_cleanly(
         patch.object(runner_module.time, "sleep", lambda _x: None),
         patch.object(runner_module.subprocess, "Popen", return_value=process),
         patch.object(runner_module, "_clear_benchmark_data") as clear_mock,
-        patch.object(runner_module, "_mark_test_complete") as mark_mock,
     ):
         assert runner_module.main() == 0
         assert clear_mock.call_count == 1
-        assert mark_mock.call_count == 1
 
 
 def test_main_returns_process_code_on_failure(
@@ -372,7 +309,6 @@ def test_main_returns_process_code_on_failure(
         patch.object(runner_module.time, "sleep", lambda _x: None),
         patch.object(runner_module.subprocess, "Popen", return_value=process),
         patch.object(runner_module, "_clear_benchmark_data"),
-        patch.object(runner_module, "_mark_test_complete"),
     ):
         assert runner_module.main() == 5
 
@@ -391,6 +327,5 @@ def test_main_treats_sigterm_exit_code_as_clean(
         patch.object(runner_module.time, "sleep", lambda _x: None),
         patch.object(runner_module.subprocess, "Popen", return_value=process),
         patch.object(runner_module, "_clear_benchmark_data"),
-        patch.object(runner_module, "_mark_test_complete"),
     ):
         assert runner_module.main() == 0

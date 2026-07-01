@@ -28,3 +28,7 @@ class MetricsExporterServiceError(BenchmarkError):
 
 class BenchmarkResultsParseError(BenchmarkError):
     """Raised when there is an error parsing the benchmark results file."""
+
+
+class BenchmarkStateError(BenchmarkError):
+    """Raised when there is an error/inconsistency in benchmark state."""

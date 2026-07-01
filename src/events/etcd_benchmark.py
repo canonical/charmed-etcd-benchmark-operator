@@ -18,13 +18,13 @@ from common.exceptions import (
     BenchmarkConfigurationError,
     BenchmarkResultsParseError,
     BenchmarkServiceError,
+    BenchmarkStateError,
     BenchmarkWorkloadError,
     MetricsExporterServiceError,
 )
 from literals import (
     BENCHMARK_RUNNER_FILE_NAME,
     BENCHMARK_RUNNER_FILE_PATH,
-    BENCHMARK_TESTS_ROOT_DIR,
     METRICS_EXPORTER_RUNNER_FILE_NAME,
     METRICS_EXPORTER_RUNNER_FILE_PATH,
 )
@@ -50,6 +50,7 @@ class EtcdBenchmarkEvents(Object):
         self.framework.observe(self.charm.on.stop_action, self._on_stop_action)
         self.framework.observe(self.charm.on.list_tests_action, self._on_list_tests_action)
         self.framework.observe(self.charm.on.get_summary_action, self._on_get_summary_action)
+        # self.framework.observe(self.charm.on.update_status, self._on_update_status)
 
     def _on_install(self, event: ops.InstallEvent) -> None:
         """Handle install event."""
@@ -93,9 +94,12 @@ class EtcdBenchmarkEvents(Object):
 
     def _on_run_action(self, event: ops.ActionEvent) -> None:
         """Handle run action event."""
+        if not self._ensure_action_on_leader(event):
+            return
+
         # Verify that it's not already running, and that etcd uris available.
 
-        if self.charm.workload.is_benchmark_running():
+        if self.charm.cluster_state.cluster.is_test_active:
             event.set_results({"error": "A benchmark is already in progress"})
             detailed_error_str = (
                 "There is already a benchmark in progress. "
@@ -119,6 +123,7 @@ class EtcdBenchmarkEvents(Object):
             return
 
         # setup test folder, metadata and results files, and then kick off the run
+        benchmark_config = None
         try:
             benchmark_config = self.charm.etcd_benchmark_manager.setup_test()
 
@@ -149,12 +154,17 @@ class EtcdBenchmarkEvents(Object):
             BenchmarkServiceError,
             MetricsExporterServiceError,
         ) as e:
+            if benchmark_config:
+                self.charm.etcd_benchmark_manager.mark_current_test_completed()
             event.set_results({"error": e.message})
             event.fail(e.detailed_description)
 
     def _on_stop_action(self, event: ops.ActionEvent) -> None:
         """Handle stop action event."""
-        if not self.charm.workload.is_benchmark_running():
+        if not self._ensure_action_on_leader(event):
+            return
+
+        if not self.charm.cluster_state.cluster.is_test_active:
             event.set_results({"error": "no active benchmark to stop"})
             detailed_error_str = (
                 "There is no active benchmark to stop. Use the 'run' action to start a benchmark."
@@ -168,6 +178,12 @@ class EtcdBenchmarkEvents(Object):
 
             self.charm.workload.stop_metrics_exporter()
 
+            # before this test's metadata is cleared from databag,
+            # we should write this to summary.json
+            self.charm.etcd_benchmark_manager.write_metadata_to_summary_file()
+
+            self.charm.etcd_benchmark_manager.mark_current_test_completed()
+
             event.set_results(
                 {
                     "results": (
@@ -177,13 +193,16 @@ class EtcdBenchmarkEvents(Object):
                     )
                 }
             )
-        except (BenchmarkServiceError, MetricsExporterServiceError) as e:
+        except (BenchmarkServiceError, MetricsExporterServiceError, BenchmarkStateError) as e:
             event.set_results({"error": e.message})
             event.fail(e.detailed_description)
 
     def _on_list_tests_action(self, event: ops.ActionEvent) -> None:
         """Handle list-tests action event."""
-        if not (tests := self.charm.etcd_benchmark_manager.list_tests(BENCHMARK_TESTS_ROOT_DIR)):
+        if not self._ensure_action_on_leader(event):
+            return
+
+        if not (tests := self.charm.etcd_benchmark_manager.list_tests()):
             event.set_results({"tests": "No tests found."})
             return
 
@@ -192,24 +211,49 @@ class EtcdBenchmarkEvents(Object):
 
     def _on_get_summary_action(self, event: ops.ActionEvent) -> None:
         """Handle get-summary action event."""
+        if not self._ensure_action_on_leader(event):
+            return
+
         if not (test_id := str(event.params.get("test-id", ""))):
             event.set_results({"error": "valid test-id not found"})
             detailed_error_str = "Please provide a valid, non-empty test-id parameter."
             event.fail(detailed_error_str)
             logger.error(detailed_error_str)
             return
-        test_folder = f"{BENCHMARK_TESTS_ROOT_DIR}/{test_id}"
-        if not self.charm.workload.file_exists(test_folder):
-            detailed_error_str = f"{test_folder} does not exist."
-            event.set_results({"error": detailed_error_str})
-            event.fail(detailed_error_str)
-            logger.error(detailed_error_str)
-            return
 
         try:
-            summary = self.charm.etcd_benchmark_manager.get_test_summary(test_folder)
+            summary = self.charm.etcd_benchmark_manager.get_test_summary(test_id)
             event.set_results({"results": summary})
+        except FileNotFoundError as e:
+            event.set_results({"error": e})
+            event.fail(f"{e}. Verify test ID.")
+            return
         except BenchmarkResultsParseError as e:
             event.set_results({"error": e.message})
             event.fail(e.detailed_description)
             return
+
+    # def _on_update_status(self, event: ops.UpdateStatusEvent) -> None:
+    #     """Mark current test completed when benchmark service is no longer running."""
+    #     del event #TODO check
+    #     if not self.charm.unit.is_leader():
+    #         return
+    #
+    #     current_test_id = self.charm.cluster_state.current_test_id
+    #     if not current_test_id:
+    #         return
+    #
+    #     if not self.charm.workload.is_benchmark_running():
+    #         self.charm.etcd_benchmark_manager.mark_current_test_completed(current_test_id)
+
+    def _ensure_action_on_leader(self, event: ops.ActionEvent) -> bool:
+        # TODO remove once scaling is supported in later versions
+        """Reject actions executed on non-leader units."""
+        if self.charm.unit.is_leader():
+            return True
+
+        detailed_error_str = "This action is only supported on the leader unit."
+        event.set_results({"error": "action not supported on non-leader units"})
+        event.fail(detailed_error_str)
+        logger.error(detailed_error_str)
+        return False

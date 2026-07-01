@@ -64,7 +64,7 @@ def test_list_tests_action(juju_vm_model: Juju) -> None:
     assert "tests" in list_action.results, "Result should contain 'tests' key"
     tests_output = list_action.results["tests"]
     assert tests_output, "Test output should exist"
-    logger.info("list-tests output: %s", tests_output)
+    logger.info(f"list-tests output: {tests_output}")
 
     output_lines = str(tests_output).strip().splitlines()
     assert len(output_lines) == 1, "There should be exactly one test listed"
@@ -96,7 +96,7 @@ def test_get_summary_action(juju_vm_model: Juju) -> None:
         "test_id in summary should match requested ID"
     )
     assert summary["metadata"]["is_active"], "Tests should still be active"
-    logger.info("get-summary output: %s", json.dumps(summary, indent=2))
+    logger.info(f"get-summary output: {json.dumps(summary, indent=2)}")
 
 
 def test_metrics_server(juju_vm_model: Juju) -> None:
@@ -144,7 +144,7 @@ def test_stop_action(juju_vm_model: Juju) -> None:
         "test_id in summary should match requested ID"
     )
     assert not summary["metadata"]["is_active"], "Tests should still be active"
-    logger.info("get-summary output after test completion: %s", json.dumps(summary, indent=2))
+    logger.info(f"get-summary output after test completion: {json.dumps(summary, indent=2)}")
 
 
 def _retrieve_test_id(juju_vm_model: Juju) -> str:
@@ -158,5 +158,5 @@ def _retrieve_test_id(juju_vm_model: Juju) -> str:
     first_line = str(tests_output).strip().splitlines()[0]
     # The test ID is the first whitespace-separated token; format "test-id (status)"
     test_id = first_line.split()[0]
-    logger.info("Using test ID: %s", test_id)
+    logger.info(f"Using test ID: {test_id}")
     return test_id

@@ -30,7 +30,7 @@ def patch_snap_cache():
 def test_stop_action_fails_when_no_active_benchmark(caplog):
     """Stop should fail if no benchmark is currently running."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False):
         with caplog.at_level("ERROR"):
@@ -45,7 +45,7 @@ def test_stop_action_fails_when_no_active_benchmark(caplog):
 def test_stop_action_stops_benchmark_and_exporter():
     """Stop should stop benchmark service and metrics exporter."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with (
         patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=True),
@@ -63,7 +63,7 @@ def test_stop_action_stops_benchmark_and_exporter():
 def test_stop_action_fails_when_systemd_raises():
     """Stop should fail with a clear message when systemd actions fail."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with (
         patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=True),
@@ -85,7 +85,7 @@ def test_stop_action_fails_when_systemd_raises():
 def test_list_tests_action_returns_no_tests_message():
     """list-tests should return a friendly message when no tests exist."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with patch("managers.etcd_benchmark.EtcdBenchmarkManager.list_tests", return_value=[]):
         ctx.run(ctx.on.action("list-tests"), state_in)
@@ -96,7 +96,7 @@ def test_list_tests_action_returns_no_tests_message():
 def test_list_tests_action_formats_test_output():
     """list-tests should format test ids with status values."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with patch(
         "managers.etcd_benchmark.EtcdBenchmarkManager.list_tests",
@@ -111,7 +111,7 @@ def test_list_tests_action_formats_test_output():
 def test_get_summary_action_fails_with_empty_test_id(caplog):
     """get-summary should fail when test-id is missing."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with caplog.at_level("ERROR"):
         with pytest.raises(ActionFailed) as e:
@@ -126,7 +126,7 @@ def test_get_summary_action_fails_with_empty_test_id(caplog):
 def test_get_summary_action_fails_when_test_folder_missing(caplog):
     """get-summary should fail when the test folder does not exist."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with patch("workload.EtcdBenchmarkWorkload.file_exists", return_value=False):
         with caplog.at_level("ERROR"):
@@ -140,7 +140,7 @@ def test_get_summary_action_fails_when_test_folder_missing(caplog):
 def test_get_summary_action_returns_summary():
     """get-summary should return the manager-rendered summary text."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with (
         patch("workload.EtcdBenchmarkWorkload.file_exists", return_value=True),
@@ -158,7 +158,7 @@ def test_get_summary_action_returns_summary():
 def test_get_summary_action_fails_when_summary_generation_errors(caplog):
     """get-summary should fail when summary parsing raises BenchmarkResultsParseError."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     parse_error = BenchmarkResultsParseError(
         message="Error preparing/writing summary",
@@ -182,7 +182,7 @@ def test_get_summary_action_fails_when_summary_generation_errors(caplog):
 def test_run_action_fails_on_benchmark_configuration_error():
     """Run should report BenchmarkConfigurationError details to action output."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     config_error = BenchmarkConfigurationError(
         message="invalid benchmark config",
@@ -208,3 +208,15 @@ def test_run_action_fails_on_benchmark_configuration_error():
 
     assert "duration must be > 0" in str(e.value)
     assert ctx.action_results == {"error": "invalid benchmark config"}
+
+
+def test_actions_fail_on_non_leader_unit():
+    """Actions should fail early when invoked on a non-leader unit."""
+    ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
+    state_in = testing.State(leader=False)
+
+    with pytest.raises(ActionFailed) as e:
+        ctx.run(ctx.on.action("list-tests"), state_in)
+
+    assert "only supported on the leader unit" in str(e.value)
+    assert ctx.action_results == {"error": "action not supported on non-leader units"}

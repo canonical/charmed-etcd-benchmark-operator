@@ -152,3 +152,7 @@ requires:
     interface: etcd_client
   certificates:
     interface: tls-certificates
+
+peers:
+  benchmark-peers:
+    interface: benchmark_peers
