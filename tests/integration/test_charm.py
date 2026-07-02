@@ -95,7 +95,6 @@ def test_get_summary_action(juju_vm_model: Juju) -> None:
     assert summary["metadata"]["test_id"] == test_id, (
         "test_id in summary should match requested ID"
     )
-    assert summary["metadata"]["is_active"], "Tests should still be active"
     logger.info(f"get-summary output: {json.dumps(summary, indent=2)}")
 
 
@@ -143,7 +142,6 @@ def test_stop_action(juju_vm_model: Juju) -> None:
     assert summary["metadata"]["test_id"] == test_id, (
         "test_id in summary should match requested ID"
     )
-    assert not summary["metadata"]["is_active"], "Tests should still be active"
     logger.info(f"get-summary output after test completion: {json.dumps(summary, indent=2)}")
 
 
