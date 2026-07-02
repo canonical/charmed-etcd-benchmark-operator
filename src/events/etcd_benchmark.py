@@ -50,7 +50,6 @@ class EtcdBenchmarkEvents(Object):
         self.framework.observe(self.charm.on.stop_action, self._on_stop_action)
         self.framework.observe(self.charm.on.list_tests_action, self._on_list_tests_action)
         self.framework.observe(self.charm.on.get_summary_action, self._on_get_summary_action)
-        # self.framework.observe(self.charm.on.update_status, self._on_update_status)
 
     def _on_install(self, event: ops.InstallEvent) -> None:
         """Handle install event."""
@@ -232,19 +231,6 @@ class EtcdBenchmarkEvents(Object):
             event.set_results({"error": e.message})
             event.fail(e.detailed_description)
             return
-
-    # def _on_update_status(self, event: ops.UpdateStatusEvent) -> None:
-    #     """Mark current test completed when benchmark service is no longer running."""
-    #     del event #TODO check
-    #     if not self.charm.unit.is_leader():
-    #         return
-    #
-    #     current_test_id = self.charm.cluster_state.current_test_id
-    #     if not current_test_id:
-    #         return
-    #
-    #     if not self.charm.workload.is_benchmark_running():
-    #         self.charm.etcd_benchmark_manager.mark_current_test_completed(current_test_id)
 
     def _ensure_action_on_leader(self, event: ops.ActionEvent) -> bool:
         # TODO remove once scaling is supported in later versions

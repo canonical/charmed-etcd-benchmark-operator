@@ -149,12 +149,12 @@ class EtcdBenchmarkManager(Object):
 
         except ValueError as e:
             error_str = "Failed to write metadata to summary.json"
-            logger.error(error_str, e)
+            logger.error(f"{error_str}: {e}")
             raise BenchmarkStateError(message=error_str, detailed_description=f"{error_str}: {e}")
 
     def get_test_summary(self, test_id: str) -> str | None:
         """Get the summary of a benchmark test, given test ID."""
-        # if summary.json exists, return this JSON.
+        # if summary.json exists AND non-empty operations summary is present, return this JSON.
         # Else, prepare summary afresh.
         test_dir = f"{BENCHMARK_TESTS_ROOT_DIR}/{test_id}"
         if not self.charm.workload.file_exists(test_dir):
@@ -164,9 +164,9 @@ class EtcdBenchmarkManager(Object):
             summary_path = Path(test_dir) / SUMMARY_JSON_FILE_NAME
             if self.charm.workload.file_exists(summary_path):
                 try:
-                    return json.dumps(
-                        json.loads(summary_path.read_text(encoding="utf-8")), indent=2
-                    )
+                    cached_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                    if isinstance(cached_summary, dict) and cached_summary.get("operations"):
+                        return json.dumps(cached_summary, indent=2)
                 except (ValueError, OSError):
                     logger.warning(
                         f"summary.json at {summary_path} malformed; "
@@ -183,13 +183,6 @@ class EtcdBenchmarkManager(Object):
 
     def mark_current_test_completed(self) -> None:
         """Mark current test as completed in peer state."""
-        # if not self.charm.cluster_state.cluster.data_interface.model.current_test_id: #TODO fix
-        #     error_str = "No current test ID found in peer relation"
-        #     logger.error(f"Error marking test completed: {error_str}")
-        #     raise BenchmarkStateError(
-        #         message=error_str, detailed_description=error_str
-        #     )
-
         self.charm.cluster_state.cluster.clear_current_test_metadata()
 
     def _read_test_metadata_from_peer_relation_databag(self) -> BenchmarkMetadata:
@@ -275,6 +268,7 @@ class EtcdBenchmarkManager(Object):
             return self._build_operations_from_aggregates(aggregates)
 
         is_test_active = self.charm.cluster_state.cluster.is_test_active
+        operations: dict[str, dict[str, Any]] = {}
 
         if not is_test_active:
             # test has concluded, so we can look for final summary in stderr

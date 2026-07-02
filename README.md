@@ -25,7 +25,7 @@ charmcraft pack
 juju add-model etcd-benchmarking
 ```
 
-3. Deploy the packed benchmarking charm. 
+3. Deploy the packed benchmark charm. 
 Then deploy [charmed-etcd](https://charmhub.io/charmed-etcd?channel=3.6/edge) from [Charmhub](https://charmhub.io/), with as many units as needed.
 ```bash
 juju deploy ./charmed-etcd-benchmark-operator_ubuntu@24.04-amd64.charm
@@ -33,8 +33,13 @@ juju deploy ./charmed-etcd-benchmark-operator_ubuntu@24.04-amd64.charm
 juju deploy charmed-etcd --channel 3.6/edge -n 2
 ```
 
+> [!NOTE]
+> The benchmark charm currently does not support scaling, and is meant to be deployed as a single unit.
+> Technically, you can scale the charmed-etcd-benchmark-operator charm to multiple units today, 
+> but you will not be able to run any benchmark actions (`run`, `list-tests`, or any others) on a non-leader unit.
+
 4. As described in the [charmed-etcd docs](https://canonical-charmed-etcd.readthedocs-hosted.com/), we will need TLS certificates in order to integrate charmed-etcd with 
-client applications (in our case, charmed-etcd-benchmarking-operator). Let's deploy the self-signed-certificate charm to help us with this.
+client applications (in our case, charmed-etcd-benchmark-operator). Let's deploy the self-signed-certificate charm to help us with this.
 ```bash
 juju deploy self-signed-certificates --channel edge
 ```
@@ -45,14 +50,14 @@ juju status --watch 3s --integrations
 ```
 
 5. Once all three deployed applications are active and all agents idle, 
-integrate self-signed-certificates with charmed-etcd and charmed-etcd-benchmarkig-operator.
+integrate self-signed-certificates with charmed-etcd and charmed-etcd-benchmark-operator.
 ```bash
 juju integrate charmed-etcd:client-certificates self-signed-certificates
 
 juju integrate charmed-etcd-benchmark-operator self-signed-certificates
 ```
 
-6. Once agents and apps have settled and integrations are available, the charmed-etcd-benchmarking-operator
+6. Once agents and apps have settled and integrations are available, the charmed-etcd-benchmark-operator
 can now be integrated with charmed-etcd. 
 ```bash
 juju integrate charmed-etcd-benchmark-operator charmed-etcd

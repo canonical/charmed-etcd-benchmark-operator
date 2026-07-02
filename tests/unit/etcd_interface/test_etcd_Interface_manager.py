@@ -14,6 +14,8 @@ def _make_etcd_interface_manager():
     charm = MagicMock()
     charm.tls_state = MagicMock()
     charm.etcd_interface_state = MagicMock()
+    charm.unit = MagicMock()
+    charm.unit.is_leader.return_value = True
     return EtcdInterfaceManager(charm), charm
 
 
@@ -57,6 +59,19 @@ def test_update_request_from_cert_returns_if_no_local_model():
 
     etcd_interface_manager.update_request_from_cert(cert)
 
+    charm.etcd_interface_state.write_local_model.assert_not_called()
+
+
+def test_update_request_from_cert_returns_if_not_leader():
+    """update_request_from_cert should skip writes on non-leader units."""
+    etcd_interface_manager, charm = _make_etcd_interface_manager()
+    cert = MagicMock()
+
+    charm.unit.is_leader.return_value = False
+
+    etcd_interface_manager.update_request_from_cert(cert)
+
+    charm.etcd_interface_state.local_model.assert_not_called()
     charm.etcd_interface_state.write_local_model.assert_not_called()
 
 

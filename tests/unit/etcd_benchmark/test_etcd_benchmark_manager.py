@@ -11,10 +11,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from common.exceptions import BenchmarkConfigurationError
+from common.exceptions import (
+    BenchmarkConfigurationError,
+    BenchmarkResultsParseError,
+    BenchmarkStateError,
+)
 from core.models import BenchmarkMetadata
 from literals import (
-    METADATA_JSON_FILE_NAME,
     SUMMARY_JSON_FILE_NAME,
     TEST_RESULTS_DIR_NAME,
 )
@@ -59,7 +62,6 @@ def test_setup_test_returns_enriched_config():
     cluster_update = charm.cluster_state.cluster.update.call_args[0][0]
     assert cluster_update["current_test_id"] == "test-123"
     assert cluster_update["current_test_name"] == "smoke-test"
-    assert cluster_update["current_test_is_active"] is True
     assert cluster_update["current_test_config"]["clients"] == 1
     assert cluster_update["current_test_started_at"]
 
@@ -86,38 +88,30 @@ def test_list_tests_returns_empty_when_tests_dir_missing(tmp_path):
     """list_tests should return an empty list when tests root is absent."""
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
 
-    charm.cluster_state.get_all_test_metadata.return_value = {}
-    assert etcd_benchmark_manager.list_tests(str(tmp_path / "does-not-exist")) == []
+    with patch(
+        "managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path / "does-not-exist")
+    ):
+        assert etcd_benchmark_manager.list_tests() == []
 
 
 def test_list_tests_returns_status_from_metadata(tmp_path):
     """list_tests should classify tests as in progress or completed from metadata."""
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
 
-    active_metadata = BenchmarkMetadata(
-        test_id="test-2",
-        test_name="active",
-        started_at=datetime.now(UTC),
-        test_config={},
-        is_active=True,
-    )
-    completed_metadata = BenchmarkMetadata(
-        test_id="test-1",
-        test_name="done",
-        started_at=datetime.now(UTC),
-        test_config={},
-        is_active=False,
-    )
+    # Create test directories
+    tests_dir = tmp_path / "tests"
+    (tests_dir / "test-2").mkdir(parents=True)
+    (tests_dir / "test-1").mkdir(parents=True)
 
-    charm.cluster_state.get_all_test_metadata.return_value = {
-        "test-2": active_metadata,
-        "test-1": completed_metadata,
-    }
+    # Set up mock to indicate test-2 is the current active test
+    charm.cluster_state.cluster.current_test_id = "test-2"
 
-    assert etcd_benchmark_manager.list_tests(str(tmp_path / "tests")) == [
-        ("test-2", "in progress"),
-        ("test-1", "completed"),
-    ]
+    with patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tests_dir)):
+        results = etcd_benchmark_manager.list_tests()
+
+    # Should have both tests, with test-2 marked as in progress
+    assert ("test-2", "in progress") in results
+    assert ("test-1", "completed") in results
 
 
 def test_get_test_summary_returns_cached_summary(tmp_path):
@@ -127,14 +121,15 @@ def test_get_test_summary_returns_cached_summary(tmp_path):
     test_dir = tmp_path / "test-1"
     test_dir.mkdir(parents=True)
     summary_path = test_dir / SUMMARY_JSON_FILE_NAME
-    summary_data = {"metadata": {"test_id": "test-1"}, "operations": {}}
+    summary_data = {"metadata": {"test_id": "test-1"}, "operations": {"read": {"total_ops": 1}}}
     summary_path.write_text(json.dumps(summary_data))
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
 
-    assert etcd_benchmark_manager.get_test_summary(str(test_dir)) == json.dumps(
-        summary_data, indent=2
-    )
+    with patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)):
+        assert etcd_benchmark_manager.get_test_summary("test-1") == json.dumps(
+            summary_data, indent=2
+        )
 
 
 def test_get_test_summary_falls_back_when_cached_summary_is_malformed(tmp_path):
@@ -147,12 +142,15 @@ def test_get_test_summary_falls_back_when_cached_summary_is_malformed(tmp_path):
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
 
-    with patch.object(
-        etcd_benchmark_manager,
-        "_prepare_and_write_summary",
-        return_value="rebuilt-summary",
-    ) as prepare_summary:
-        summary = etcd_benchmark_manager.get_test_summary(str(test_dir))
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_prepare_and_write_summary",
+            return_value="rebuilt-summary",
+        ) as prepare_summary,
+    ):
+        summary = etcd_benchmark_manager.get_test_summary("test-1")
 
     prepare_summary.assert_called_once_with(str(test_dir))
     assert summary == "rebuilt-summary"
@@ -168,13 +166,16 @@ def test_get_test_summary_wraps_errors_from_prepare_summary(tmp_path):
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
 
-    with patch.object(
-        etcd_benchmark_manager,
-        "_prepare_and_write_summary",
-        side_effect=OSError("disk io failed"),
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_prepare_and_write_summary",
+            side_effect=OSError("disk io failed"),
+        ),
+        pytest.raises(BenchmarkResultsParseError) as e,
     ):
-        with pytest.raises(BenchmarkResultsParseError) as e:
-            etcd_benchmark_manager.get_test_summary(str(test_dir))
+        etcd_benchmark_manager.get_test_summary("test-wrap")
 
     assert e.value.message == "Error preparing/writing summary"
     assert "disk io failed" in e.value.detailed_description
@@ -182,7 +183,7 @@ def test_get_test_summary_wraps_errors_from_prepare_summary(tmp_path):
 
 def test_write_metadata_to_summary_file_is_noop_when_metadata_exists(tmp_path):
     """write_metadata_to_summary_file should not overwrite existing metadata."""
-    etcd_benchmark_manager, _ = _make_etcd_benchmark_manager()
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
 
     test_dir = tmp_path / "test-1"
     test_dir.mkdir(parents=True)
@@ -197,19 +198,21 @@ def test_write_metadata_to_summary_file_is_noop_when_metadata_exists(tmp_path):
     )
 
     metadata = BenchmarkMetadata(
-        test_id="new-test",
+        test_id="test-1",
         test_name="new",
         started_at=datetime.now(UTC),
         test_config={},
-        is_active=True,
     )
 
-    with patch.object(
-        etcd_benchmark_manager,
-        "read_test_metadata_from_relation",
-        return_value=metadata,
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_read_test_metadata_from_peer_relation_databag",
+            return_value=metadata,
+        ),
     ):
-        etcd_benchmark_manager.write_metadata_to_summary_file(str(test_dir))
+        etcd_benchmark_manager.write_metadata_to_summary_file()
 
     saved_summary = json.loads(summary_path.read_text())
     assert saved_summary["metadata"]["test_id"] == "existing-test"
@@ -218,7 +221,7 @@ def test_write_metadata_to_summary_file_is_noop_when_metadata_exists(tmp_path):
 
 def test_write_metadata_to_summary_file_writes_when_metadata_missing(tmp_path):
     """write_metadata_to_summary_file should inject metadata when key is missing."""
-    etcd_benchmark_manager, _ = _make_etcd_benchmark_manager()
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
 
     test_dir = tmp_path / "test-2"
     test_dir.mkdir(parents=True)
@@ -230,15 +233,17 @@ def test_write_metadata_to_summary_file_writes_when_metadata_missing(tmp_path):
         test_name="new-meta",
         started_at=datetime.now(UTC),
         test_config={"clients": 2},
-        is_active=True,
     )
 
-    with patch.object(
-        etcd_benchmark_manager,
-        "read_test_metadata_from_relation",
-        return_value=metadata,
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_read_test_metadata_from_peer_relation_databag",
+            return_value=metadata,
+        ),
     ):
-        etcd_benchmark_manager.write_metadata_to_summary_file(str(test_dir))
+        etcd_benchmark_manager.write_metadata_to_summary_file()
 
     saved_summary = json.loads(summary_path.read_text())
     assert saved_summary["metadata"]["test_id"] == "test-2"
@@ -263,19 +268,20 @@ def test_create_initial_test_artifacts_writes_metadata_and_result_files(tmp_path
     )
 
 
-def test_prepare_and_write_summary_fails_when_metadata_missing(tmp_path):
-    """_prepare_and_write_summary should fail when metadata is missing."""
+def test_prepare_and_write_summary_fails_when_summary_file_missing_for_completed_test(tmp_path):
+    """_prepare_and_write_summary should fail when summary.json is missing for completed test."""
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
 
     test_dir = tmp_path / "test-1"
     (test_dir / TEST_RESULTS_DIR_NAME).mkdir(parents=True)
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+    charm.cluster_state.cluster.is_test_active = False
 
     with pytest.raises(FileNotFoundError) as e:
         etcd_benchmark_manager._prepare_and_write_summary(str(test_dir))
 
-    assert "Missing metadata for test" in str(e.value)
+    assert "Missing summary file" in str(e.value)
 
 
 def test_parse_final_operations_from_stderr_parses_read_and_write_blocks(tmp_path):
@@ -404,12 +410,14 @@ def test_retrieve_config_returns_none_for_missing_options():
     }
 
 
-def test_list_tests_ignores_malformed_metadata_in_peer_state(tmp_path):
-    """list_tests should ignore malformed metadata rows from peer state."""
+def test_list_tests_returns_empty_when_no_test_dirs_exist(tmp_path):
+    """list_tests should return empty list when no test dirs exist."""
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
-    charm.cluster_state.get_all_test_metadata.return_value = {}
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir(parents=True)
 
-    results = etcd_benchmark_manager.list_tests(str(tmp_path / "tests"))
+    with patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tests_dir)):
+        results = etcd_benchmark_manager.list_tests()
     assert results == []
 
 
@@ -427,12 +435,15 @@ def test_get_test_summary_calls_prepare_when_summary_file_absent(tmp_path):
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
 
-    with patch.object(
-        etcd_benchmark_manager,
-        "_prepare_and_write_summary",
-        return_value="fresh-summary",
-    ) as prepare_summary:
-        result = etcd_benchmark_manager.get_test_summary(str(test_dir))
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_prepare_and_write_summary",
+            return_value="fresh-summary",
+        ) as prepare_summary,
+    ):
+        result = etcd_benchmark_manager.get_test_summary("test-1")
 
     prepare_summary.assert_called_once_with(str(test_dir))
     assert result == "fresh-summary"
@@ -501,9 +512,10 @@ def test_prepare_and_write_summary_fails_when_results_dir_missing(tmp_path):
         test_name="t",
         started_at=datetime.now(UTC),
         test_config={},
-        is_active=False,
     )
-    (test_dir / METADATA_JSON_FILE_NAME).write_text(json.dumps(metadata.to_dict()))
+    (test_dir / SUMMARY_JSON_FILE_NAME).write_text(
+        json.dumps({"metadata": metadata.to_dict(), "operations": {}})
+    )
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
 
@@ -526,13 +538,15 @@ def test_prepare_and_write_summary_for_completed_test_from_stderr(tmp_path):
         test_name="done",
         started_at=datetime.now(UTC),
         test_config={},
-        is_active=False,
     )
-    (test_dir / METADATA_JSON_FILE_NAME).write_text(json.dumps(metadata.to_dict()))
+    (test_dir / SUMMARY_JSON_FILE_NAME).write_text(
+        json.dumps({"metadata": metadata.to_dict(), "operations": {}})
+    )
     (results_dir / "stderr.log").write_text(_make_stderr_content())
     (results_dir / "stdout.jsonl").write_text(_make_stdout_jsonl())
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+    charm.cluster_state.cluster.is_test_active = False
 
     summary_str = etcd_benchmark_manager._prepare_and_write_summary(str(test_dir))
     summary = json.loads(summary_str)
@@ -556,13 +570,15 @@ def test_prepare_and_write_summary_falls_back_to_stdout_when_stderr_unparseable(
         test_name="done",
         started_at=datetime.now(UTC),
         test_config={},
-        is_active=False,
     )
-    (test_dir / METADATA_JSON_FILE_NAME).write_text(json.dumps(metadata.to_dict()))
+    (test_dir / SUMMARY_JSON_FILE_NAME).write_text(
+        json.dumps({"metadata": metadata.to_dict(), "operations": {}})
+    )
     (results_dir / "stderr.log").write_text("no useful content here")
     (results_dir / "stdout.jsonl").write_text(_make_stdout_jsonl())
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+    charm.cluster_state.cluster.is_test_active = False
 
     summary_str = etcd_benchmark_manager._prepare_and_write_summary(str(test_dir))
     summary = json.loads(summary_str)
@@ -571,8 +587,10 @@ def test_prepare_and_write_summary_falls_back_to_stdout_when_stderr_unparseable(
     assert "write" in summary["operations"]
 
 
-def test_prepare_and_write_summary_fails_when_stderr_missing_for_completed_test(tmp_path):
-    """_prepare_and_write_summary should raise when stderr is absent for a completed test."""
+def test_prepare_and_write_summary_fails_when_both_stderr_and_stdout_missing_for_completed_test(
+    tmp_path,
+):
+    """_prepare_and_write_summary should raise when both stderr and stdout are unusable."""
     etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
 
     test_dir = tmp_path / "test-1"
@@ -584,17 +602,21 @@ def test_prepare_and_write_summary_fails_when_stderr_missing_for_completed_test(
         test_name="done",
         started_at=datetime.now(UTC),
         test_config={},
-        is_active=False,
     )
-    (test_dir / METADATA_JSON_FILE_NAME).write_text(json.dumps(metadata.to_dict()))
-    # no stderr.log created
+    (test_dir / SUMMARY_JSON_FILE_NAME).write_text(
+        json.dumps({"metadata": metadata.to_dict(), "operations": {}})
+    )
+    # Create unparseable stderr so it falls back to stdout, which is missing
+    (results_dir / "stderr.log").write_text("unparseable")
+    # no stdout.jsonl created
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+    charm.cluster_state.cluster.is_test_active = False
 
     with pytest.raises(FileNotFoundError) as e:
         etcd_benchmark_manager._prepare_and_write_summary(str(test_dir))
 
-    assert "Missing stderr file" in str(e.value)
+    assert "Missing stdout file" in str(e.value)
 
 
 def test_prepare_and_write_summary_for_active_test_from_stdout(tmp_path):
@@ -610,14 +632,18 @@ def test_prepare_and_write_summary_for_active_test_from_stdout(tmp_path):
         test_name="running",
         started_at=datetime.now(UTC),
         test_config={},
-        is_active=True,
     )
-    (test_dir / METADATA_JSON_FILE_NAME).write_text(json.dumps(metadata.to_dict()))
     (results_dir / "stdout.jsonl").write_text(_make_stdout_jsonl())
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+    charm.cluster_state.cluster.is_test_active = True
 
-    summary_str = etcd_benchmark_manager._prepare_and_write_summary(str(test_dir))
+    with patch.object(
+        etcd_benchmark_manager,
+        "_read_test_metadata_from_peer_relation_databag",
+        return_value=metadata,
+    ):
+        summary_str = etcd_benchmark_manager._prepare_and_write_summary(str(test_dir))
     summary = json.loads(summary_str)
 
     assert "read" in summary["operations"]
@@ -638,14 +664,20 @@ def test_prepare_and_write_summary_fails_when_stdout_missing_for_active_test(tmp
         test_name="running",
         started_at=datetime.now(UTC),
         test_config={},
-        is_active=True,
     )
-    (test_dir / METADATA_JSON_FILE_NAME).write_text(json.dumps(metadata.to_dict()))
     # no stdout.jsonl created
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+    charm.cluster_state.cluster.is_test_active = True
 
-    with pytest.raises(FileNotFoundError) as e:
+    with (
+        patch.object(
+            etcd_benchmark_manager,
+            "_read_test_metadata_from_peer_relation_databag",
+            return_value=metadata,
+        ),
+        pytest.raises(FileNotFoundError) as e,
+    ):
         etcd_benchmark_manager._prepare_and_write_summary(str(test_dir))
 
     assert "Missing stdout file" in str(e.value)
@@ -664,9 +696,10 @@ def test_prepare_and_write_summary_fails_when_fallback_stdout_missing_for_comple
         test_name="done",
         started_at=datetime.now(UTC),
         test_config={},
-        is_active=False,
     )
-    (test_dir / METADATA_JSON_FILE_NAME).write_text(json.dumps(metadata.to_dict()))
+    (test_dir / SUMMARY_JSON_FILE_NAME).write_text(
+        json.dumps({"metadata": metadata.to_dict(), "operations": {}})
+    )
     (results_dir / "stderr.log").write_text("no useful content here")
     # no stdout.jsonl created
 
@@ -909,3 +942,389 @@ def test_aggregate_jsonl_results_keeps_zero_stddev_weight_when_ops_is_one(tmp_pa
     assert aggregates["read"]["stddev_accumulator"] == 0.0
     assert aggregates["read"]["min_throughput"] == 10.0
     assert aggregates["read"]["max_throughput"] == 10.0
+
+
+# ---------------------------------------------------------------------------
+# write_metadata_to_summary_file – unreadable/malformed summary branches
+# ---------------------------------------------------------------------------
+
+
+def test_write_metadata_to_summary_file_creates_when_summary_absent(tmp_path):
+    """write_metadata_to_summary_file should create summary.json when none exists."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    test_dir = tmp_path / "test-3"
+    test_dir.mkdir(parents=True)
+    summary_path = test_dir / SUMMARY_JSON_FILE_NAME
+
+    metadata = BenchmarkMetadata(
+        test_id="test-3",
+        test_name="new",
+        started_at=datetime.now(UTC),
+        test_config={"clients": 3},
+    )
+
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_read_test_metadata_from_peer_relation_databag",
+            return_value=metadata,
+        ),
+    ):
+        etcd_benchmark_manager.write_metadata_to_summary_file()
+
+    saved = json.loads(summary_path.read_text())
+    assert saved["metadata"]["test_id"] == "test-3"
+    assert saved["operations"] == {}
+
+
+def test_write_metadata_to_summary_file_recreates_when_summary_is_malformed(tmp_path):
+    """write_metadata_to_summary_file should recreate summary.json when it is unreadable JSON."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    test_dir = tmp_path / "test-1"
+    test_dir.mkdir(parents=True)
+    summary_path = test_dir / SUMMARY_JSON_FILE_NAME
+    summary_path.write_text("{not-json")
+
+    metadata = BenchmarkMetadata(
+        test_id="test-1",
+        test_name="new",
+        started_at=datetime.now(UTC),
+        test_config={"clients": 1},
+    )
+
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_read_test_metadata_from_peer_relation_databag",
+            return_value=metadata,
+        ),
+    ):
+        etcd_benchmark_manager.write_metadata_to_summary_file()
+
+    saved = json.loads(summary_path.read_text())
+    assert saved["metadata"]["test_id"] == "test-1"
+    assert saved["operations"] == {}
+
+
+def test_write_metadata_to_summary_file_recreates_when_summary_is_non_dict(tmp_path):
+    """write_metadata_to_summary_file should recreate when existing summary is a JSON list."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    test_dir = tmp_path / "test-2"
+    test_dir.mkdir(parents=True)
+    summary_path = test_dir / SUMMARY_JSON_FILE_NAME
+    summary_path.write_text(json.dumps(["not", "an", "object"]))
+
+    metadata = BenchmarkMetadata(
+        test_id="test-2",
+        test_name="new",
+        started_at=datetime.now(UTC),
+        test_config={},
+    )
+
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_read_test_metadata_from_peer_relation_databag",
+            return_value=metadata,
+        ),
+    ):
+        etcd_benchmark_manager.write_metadata_to_summary_file()
+
+    saved = json.loads(summary_path.read_text())
+    assert saved["metadata"]["test_id"] == "test-2"
+
+
+def test_write_metadata_to_summary_file_raises_state_error_when_metadata_unavailable(tmp_path):
+    """write_metadata_to_summary_file should wrap ValueError into BenchmarkStateError."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_read_test_metadata_from_peer_relation_databag",
+            side_effect=ValueError("Benchmark metadata unavailable/incomplete"),
+        ),
+    ):
+        with pytest.raises(BenchmarkStateError) as e:
+            etcd_benchmark_manager.write_metadata_to_summary_file()
+
+    assert e.value.message == "Failed to write metadata to summary.json"
+    assert "Benchmark metadata unavailable/incomplete" in e.value.detailed_description
+
+
+# ---------------------------------------------------------------------------
+# get_test_summary – directory missing and cached-without-operations branches
+# ---------------------------------------------------------------------------
+
+
+def test_get_test_summary_raises_file_not_found_when_test_dir_missing(tmp_path):
+    """get_test_summary should raise FileNotFoundError when the test directory is absent."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    charm.workload.file_exists.return_value = False
+
+    with patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)):
+        with pytest.raises(FileNotFoundError) as e:
+            etcd_benchmark_manager.get_test_summary("missing-test")
+
+    assert "Test results directory not found for test ID: missing-test" in str(e.value)
+
+
+def test_get_test_summary_rebuilds_when_cached_summary_has_no_operations(tmp_path):
+    """get_test_summary should rebuild when cached summary lacks operations data."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    test_dir = tmp_path / "test-1"
+    test_dir.mkdir(parents=True)
+    summary_path = test_dir / SUMMARY_JSON_FILE_NAME
+    # Valid JSON object, but no operations key -> falls through to rebuild
+    summary_path.write_text(json.dumps({"metadata": {"test_id": "test-1"}}))
+
+    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_prepare_and_write_summary",
+            return_value="rebuilt-summary",
+        ) as prepare_summary,
+    ):
+        result = etcd_benchmark_manager.get_test_summary("test-1")
+
+    prepare_summary.assert_called_once_with(str(test_dir))
+    assert result == "rebuilt-summary"
+
+
+def test_get_test_summary_rebuilds_when_cached_summary_is_not_dict(tmp_path):
+    """get_test_summary should rebuild when cached summary is a JSON non-object."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    test_dir = tmp_path / "test-1"
+    test_dir.mkdir(parents=True)
+    summary_path = test_dir / SUMMARY_JSON_FILE_NAME
+    summary_path.write_text(json.dumps(["not", "an", "object"]))
+
+    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_prepare_and_write_summary",
+            return_value="rebuilt-summary",
+        ) as prepare_summary,
+    ):
+        result = etcd_benchmark_manager.get_test_summary("test-1")
+
+    prepare_summary.assert_called_once_with(str(test_dir))
+    assert result == "rebuilt-summary"
+
+
+# ---------------------------------------------------------------------------
+# mark_current_test_completed
+# ---------------------------------------------------------------------------
+
+
+def test_mark_current_test_completed_clears_peer_metadata():
+    """mark_current_test_completed should delegate to cluster.clear_current_test_metadata."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    etcd_benchmark_manager.mark_current_test_completed()
+
+    charm.cluster_state.cluster.clear_current_test_metadata.assert_called_once_with()
+
+
+# ---------------------------------------------------------------------------
+# _read_test_metadata_from_peer_relation_databag – error branches
+# ---------------------------------------------------------------------------
+
+
+def test_read_metadata_from_peer_relation_raises_when_relation_missing():
+    """_read_test_metadata_from_peer_relation_databag should raise when no peer relation."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    charm.cluster_state.cluster.relation = None
+
+    with pytest.raises(ValueError) as e:
+        etcd_benchmark_manager._read_test_metadata_from_peer_relation_databag()
+
+    assert "Peer relation is not available" in str(e.value)
+
+
+def test_read_metadata_from_peer_relation_raises_when_metadata_incomplete():
+    """_read_test_metadata_from_peer_relation_databag should raise when metadata is incomplete."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    cluster = charm.cluster_state.cluster
+    cluster.relation = object()
+    # All current_test_* fields are MagicMock by default; force them falsy.
+    cluster.current_test_id = None
+    cluster.current_test_name = "some-name"
+    cluster.current_test_started_at = datetime.now(UTC)
+    cluster.current_test_config = {"a": 1}
+
+    with pytest.raises(ValueError) as e:
+        etcd_benchmark_manager._read_test_metadata_from_peer_relation_databag()
+
+    assert "Benchmark metadata unavailable/incomplete" in str(e.value)
+
+
+# ---------------------------------------------------------------------------
+# _read_test_metadata_from_summary_file – error branches
+# ---------------------------------------------------------------------------
+
+
+def test_read_metadata_from_summary_file_raises_when_summary_missing(tmp_path):
+    """_read_test_metadata_from_summary_file should raise when summary.json is absent."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    test_dir = tmp_path / "test-1"
+    test_dir.mkdir(parents=True)
+
+    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+
+    with pytest.raises(FileNotFoundError) as e:
+        etcd_benchmark_manager._read_test_metadata_from_summary_file(test_dir)
+
+    assert "Missing summary file in" in str(e.value)
+
+
+def test_read_metadata_from_summary_file_raises_when_summary_is_non_dict(tmp_path):
+    """_read_test_metadata_from_summary_file should raise when summary is a JSON list."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    test_dir = tmp_path / "test-1"
+    test_dir.mkdir(parents=True)
+    (test_dir / SUMMARY_JSON_FILE_NAME).write_text(json.dumps(["not", "an", "object"]))
+
+    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+
+    with pytest.raises(ValueError) as e:
+        etcd_benchmark_manager._read_test_metadata_from_summary_file(test_dir)
+
+    assert "expected JSON object" in str(e.value)
+
+
+def test_read_metadata_from_summary_file_raises_when_metadata_missing(tmp_path):
+    """_read_test_metadata_from_summary_file should raise when the metadata object is absent."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    test_dir = tmp_path / "test-1"
+    test_dir.mkdir(parents=True)
+    (test_dir / SUMMARY_JSON_FILE_NAME).write_text(
+        json.dumps({"operations": {"read": {"total_ops": 1}}})
+    )
+
+    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+
+    with pytest.raises(ValueError) as e:
+        etcd_benchmark_manager._read_test_metadata_from_summary_file(test_dir)
+
+    assert "missing 'metadata' object" in str(e.value)
+
+
+def test_read_metadata_from_summary_file_returns_metadata_when_valid(tmp_path):
+    """_read_test_metadata_from_summary_file should return a BenchmarkMetadata when valid."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    test_dir = tmp_path / "test-1"
+    test_dir.mkdir(parents=True)
+    metadata = BenchmarkMetadata(
+        test_id="test-1",
+        test_name="done",
+        started_at=datetime.now(UTC),
+        test_config={"clients": 2},
+    )
+    (test_dir / SUMMARY_JSON_FILE_NAME).write_text(
+        json.dumps({"metadata": metadata.to_dict(), "operations": {}})
+    )
+
+    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+
+    result = etcd_benchmark_manager._read_test_metadata_from_summary_file(test_dir)
+
+    assert result.test_id == "test-1"
+    assert result.test_config == {"clients": 2}
+
+
+# ---------------------------------------------------------------------------
+# _parse_final_operations_from_stderr – missing stderr file
+# ---------------------------------------------------------------------------
+
+
+def test_parse_final_operations_from_stderr_raises_when_stderr_missing(tmp_path):
+    """_parse_final_operations_from_stderr should raise FileNotFoundError when stderr absent."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+    stderr_path = tmp_path / "stderr.log"
+
+    charm.workload.file_exists.return_value = False
+
+    with pytest.raises(FileNotFoundError) as e:
+        etcd_benchmark_manager._parse_final_operations_from_stderr(stderr_path)
+
+    assert "Missing stderr file" in str(e.value)
+
+
+# ---------------------------------------------------------------------------
+# get_test_summary – KeyError is wrapped into BenchmarkResultsParseError
+# ---------------------------------------------------------------------------
+
+
+def test_get_test_summary_wraps_key_error_from_prepare_summary(tmp_path):
+    """get_test_summary should wrap KeyError into BenchmarkResultsParseError."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    test_dir = tmp_path / "test-1"
+    test_dir.mkdir(parents=True)
+
+    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+
+    with (
+        patch("managers.etcd_benchmark.BENCHMARK_TESTS_ROOT_DIR", str(tmp_path)),
+        patch.object(
+            etcd_benchmark_manager,
+            "_prepare_and_write_summary",
+            side_effect=KeyError("missing-key"),
+        ),
+        pytest.raises(BenchmarkResultsParseError) as e,
+    ):
+        etcd_benchmark_manager.get_test_summary("test-1")
+
+    assert e.value.message == "Error preparing/writing summary"
+    assert "missing-key" in e.value.detailed_description
+
+
+# ---------------------------------------------------------------------------
+# _prepare_and_write_summary – active test with missing summary persists skip
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_and_write_summary_does_not_persist_when_test_active(tmp_path):
+    """_prepare_and_write_summary should not write summary.json for active tests."""
+    etcd_benchmark_manager, charm = _make_etcd_benchmark_manager()
+
+    test_dir = tmp_path / "test-active"
+    results_dir = test_dir / TEST_RESULTS_DIR_NAME
+    results_dir.mkdir(parents=True)
+    (results_dir / "stdout.jsonl").write_text(_make_stdout_jsonl())
+
+    metadata = BenchmarkMetadata(
+        test_id="test-active",
+        test_name="running",
+        started_at=datetime.now(UTC),
+        test_config={},
+    )
+
+    charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
+    charm.cluster_state.cluster.is_test_active = True
+
+    with patch.object(
+        etcd_benchmark_manager,
+        "_read_test_metadata_from_peer_relation_databag",
+        return_value=metadata,
+    ):
+        etcd_benchmark_manager._prepare_and_write_summary(str(test_dir))
+
+    assert not (test_dir / SUMMARY_JSON_FILE_NAME).exists()
