@@ -606,8 +606,8 @@ def test_prepare_and_write_summary_fails_when_both_stderr_and_stdout_missing_for
     (test_dir / SUMMARY_JSON_FILE_NAME).write_text(
         json.dumps({"metadata": metadata.to_dict(), "operations": {}})
     )
-    # Create unparseable stderr so it falls back to stdout, which is missing
-    (results_dir / "stderr.log").write_text("unparseable")
+    # Create unparsable stderr so it falls back to stdout, which is missing
+    (results_dir / "stderr.log").write_text("unparsable")
     # no stdout.jsonl created
 
     charm.workload.file_exists.side_effect = lambda file_path: Path(file_path).exists()
