@@ -48,7 +48,7 @@ class EtcdInterfaceEvents(Object):
     ) -> None:
         """Handle etcd client relation data changed event."""
         response = event.response
-        logger.info("Endpoints changed: %s", response.endpoints)
+        logger.info(f"Endpoints changed: {response.endpoints}")
         if not response.endpoints:
             logger.error("No endpoints available")
 

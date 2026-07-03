@@ -14,14 +14,17 @@ from typing import TYPE_CHECKING, Any
 
 from ops import Object
 
-from common.exceptions import BenchmarkConfigurationError, BenchmarkResultsParseError
+from common.exceptions import (
+    BenchmarkConfigurationError,
+    BenchmarkResultsParseError,
+    BenchmarkStateError,
+)
 from core.models import BenchmarkMetadata
 from literals import (
     BENCHMARK_TESTS_ROOT_DIR,
     CA_CERT_PATH,
     CLIENT_CERT_PATH,
     CLIENT_KEY_PATH,
-    METADATA_JSON_FILE_NAME,
     SUMMARY_JSON_FILE_NAME,
     TEST_RESULTS_DIR_NAME,
 )
@@ -47,8 +50,7 @@ class EtcdBenchmarkManager(Object):
             config dict to be passed to benchmark runner
         """
         # Create unique test folder in the unit and create initial artifacts:
-        # 1) metadata file,
-        # 2) /results dir in which to put stdout.jsonl and stderr.log from benchmark tool.
+        # /results dir in which to put stdout.jsonl and stderr.log from benchmark tool.
         # Return test configs to be passed to runner.
 
         uris = self.charm.etcd_interface_state.uris
@@ -67,14 +69,24 @@ class EtcdBenchmarkManager(Object):
                 detailed_description=detailed_error_str,
             )
 
-        results_dir = self._create_initial_test_artifacts(
-            BenchmarkMetadata(
-                test_name=str(self.charm.config.get("test-name")),
-                test_id=test_id,
-                started_at=started_at,
-                test_config=config,
-            )
+        metadata = BenchmarkMetadata(
+            test_name=str(self.charm.config.get("test-name")),
+            test_id=test_id,
+            started_at=started_at,
+            test_config=config,
         )
+
+        # update metadata on app databag
+        self.charm.cluster_state.cluster.update(
+            {
+                "current_test_id": metadata.test_id,
+                "current_test_name": metadata.test_name,
+                "current_test_started_at": metadata.started_at.isoformat(),
+                "current_test_config": metadata.test_config,
+            }
+        )
+
+        results_dir = self._create_initial_test_artifacts(test_id)
 
         config["current_test_id"] = test_id
         config["current_test_name"] = self.charm.config.get("test-name")
@@ -86,47 +98,79 @@ class EtcdBenchmarkManager(Object):
 
         return config
 
-    def list_tests(self, tests_dir: str) -> list[tuple[str, str]]:
+    def list_tests(self) -> list[tuple[str, str]]:
         """Return available benchmark result directory names and status, newest first."""
-        test_dir = Path(tests_dir)
-        if not self.charm.workload.file_exists(test_dir):
+        test_dir = Path(BENCHMARK_TESTS_ROOT_DIR)
+        if not test_dir.exists() or not test_dir.is_dir():
             return []
 
-        results: list[tuple[str, str]] = []
+        statuses = {
+            path.name: "completed"
+            for path in sorted(
+                (path for path in test_dir.iterdir() if path.is_dir()), reverse=True
+            )
+        }
 
-        for path in sorted([p for p in test_dir.iterdir() if p.is_dir()], reverse=True):
-            metadata_path = path / METADATA_JSON_FILE_NAME
-            status = "unknown"
+        current_test_id = self.charm.cluster_state.cluster.current_test_id
+        if (current_test_id is not None) and (current_test_id in statuses):
+            statuses[current_test_id] = "in progress"
 
-            if self.charm.workload.file_exists(metadata_path):
+        return list(statuses.items())
+
+    def write_metadata_to_summary_file(self) -> None:
+        """Write metadata from peer-relation to summary.json; only when not already done."""
+        try:
+            metadata = self._read_test_metadata_from_peer_relation_databag()
+
+            test_dir = f"{BENCHMARK_TESTS_ROOT_DIR}/{metadata.test_id}"
+
+            summary_path = Path(test_dir) / SUMMARY_JSON_FILE_NAME
+            summary_data: dict[str, Any] = {"operations": {}}
+
+            if summary_path.exists():
                 try:
-                    with metadata_path.open() as f:
-                        data = json.load(f)
-                    metadata = BenchmarkMetadata.from_dict(data)
-                    status = "in progress" if metadata.is_active else "completed"
-                except (OSError, json.JSONDecodeError, KeyError, ValueError) as e:
-                    logger.warning("Failed to read metadata for test %s: %s", path.name, e)
+                    with summary_path.open(encoding="utf-8") as f:
+                        existing = json.load(f)
+                    if isinstance(existing, dict):
+                        if "metadata" in existing:
+                            return
+                        summary_data = existing
+                except (OSError, json.JSONDecodeError):
+                    logger.warning(
+                        f"summary.json at {summary_path} is unreadable; recreating file"
+                    )
 
-            results.append((path.name, status))
+            summary_data["metadata"] = metadata.to_dict()
+            summary_data.setdefault("operations", {})
 
-        return results
+            with summary_path.open("w", encoding="utf-8") as f:
+                json.dump(summary_data, f, indent=2)
+                f.write("\n")
 
-    def get_test_summary(self, test_dir: str) -> str | None:
+        except ValueError as e:
+            error_str = "Failed to write metadata to summary.json"
+            logger.error(f"{error_str}: {e}")
+            raise BenchmarkStateError(message=error_str, detailed_description=f"{error_str}: {e}")
+
+    def get_test_summary(self, test_id: str) -> str | None:
         """Get the summary of a benchmark test, given test ID."""
-        # if summary.json exists, return this JSON.
+        # if summary.json exists AND non-empty operations summary is present, return this JSON.
         # Else, prepare summary afresh.
+        test_dir = f"{BENCHMARK_TESTS_ROOT_DIR}/{test_id}"
+        if not self.charm.workload.file_exists(test_dir):
+            raise FileNotFoundError(f"Test results directory not found for test ID: {test_id}.")
 
         try:
             summary_path = Path(test_dir) / SUMMARY_JSON_FILE_NAME
             if self.charm.workload.file_exists(summary_path):
                 try:
-                    return json.dumps(
-                        json.loads(summary_path.read_text(encoding="utf-8")), indent=2
-                    )
+                    cached_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                    if isinstance(cached_summary, dict) and cached_summary.get("operations"):
+                        return json.dumps(cached_summary, indent=2)
                 except (ValueError, OSError):
                     logger.warning(
-                        "summary.json at %s malformed; preparing summary from stdout.jsonl.",
-                        summary_path,
+                        f"summary.json at {summary_path} malformed; "
+                        f"preparing summary from stdout.jsonl."
                     )
 
             return self._prepare_and_write_summary(test_dir)
@@ -136,6 +180,31 @@ class EtcdBenchmarkManager(Object):
             raise BenchmarkResultsParseError(
                 message=error_str, detailed_description=f"{error_str}: {e}"
             )
+
+    def mark_current_test_completed(self) -> None:
+        """Mark current test as completed in peer state."""
+        self.charm.cluster_state.cluster.clear_current_test_metadata()
+
+    def _read_test_metadata_from_peer_relation_databag(self) -> BenchmarkMetadata:
+        """Build benchmark metadata from the current peer-relation app data."""
+        cluster = self.charm.cluster_state.cluster
+        if not cluster.relation:
+            raise ValueError("Peer relation is not available")
+
+        if (
+            not cluster.current_test_id
+            or not cluster.current_test_name
+            or not cluster.current_test_started_at
+            or not cluster.current_test_config
+        ):
+            raise ValueError("Benchmark metadata unavailable/incomplete in peer relation databag")
+
+        return BenchmarkMetadata(
+            test_id=cluster.current_test_id,
+            test_name=cluster.current_test_name,
+            started_at=cluster.current_test_started_at,
+            test_config=cluster.current_test_config,
+        )
 
     def _retrieve_config(self) -> dict[str, Any]:
         """Read current charm config."""
@@ -155,20 +224,16 @@ class EtcdBenchmarkManager(Object):
             "report_interval": config.get("report-interval"),
         }
 
-    def _create_initial_test_artifacts(self, benchmark_metadata: BenchmarkMetadata) -> str:
+    def _create_initial_test_artifacts(self, test_id: str) -> str:
         """Create filesystem artifacts for a newly started benchmark.
 
         Returns:
              path to the created results dir, with stdout.jsonl and stderr.log.
         """
-        # This test's metadata: Create the test directory for this benchmark test
-        test_dir = Path(BENCHMARK_TESTS_ROOT_DIR) / benchmark_metadata.test_id
+        # Create this test's result directory skeleton used by the runners.
+        test_dir = Path(BENCHMARK_TESTS_ROOT_DIR) / test_id
         Path(str(test_dir)).mkdir(parents=True, exist_ok=True)
 
-        self.charm.workload.write_file(
-            file=str(test_dir / METADATA_JSON_FILE_NAME),
-            content=json.dumps(benchmark_metadata.to_dict(), indent=2) + "\n",
-        )
         self.charm.workload.write_file(
             file=str(test_dir / TEST_RESULTS_DIR_NAME / "stdout.jsonl"),
         )
@@ -183,68 +248,88 @@ class EtcdBenchmarkManager(Object):
         Prepare summary from stdout/stderr in results dir,
         optionally write to summary.json, and return it.
         """
-        # First try to find summary on stderr.log. Parse and persist to summary.json file.
+        # First, try to find summary on stderr.log, parse this.
         # If not found, prepare summary from stdout.jsonl.
         # If test has concluded, persist to summary.json file.
 
         test_dir_path = Path(test_dir)
         summary_path = test_dir_path / SUMMARY_JSON_FILE_NAME
-        metadata_path = test_dir_path / METADATA_JSON_FILE_NAME
         results_dir = test_dir_path / TEST_RESULTS_DIR_NAME
         stdout_file = results_dir / "stdout.jsonl"
         stderr_file = results_dir / "stderr.log"
 
-        if not self.charm.workload.file_exists(metadata_path):
-            raise FileNotFoundError(f"Missing metadata file: {metadata_path}")
         if not self.charm.workload.file_exists(results_dir):
             raise FileNotFoundError(f"Missing results dir: {results_dir}")
 
-        # Load metadata
-        with metadata_path.open() as f:
-            data = json.load(f)
-        metadata = BenchmarkMetadata.from_dict(data)
-
-        operations: dict[str, Any]
-
-        if (
-            not metadata.is_active
-        ):  # test has concluded, so we can look for final summary in stderr
-            if not self.charm.workload.file_exists(stderr_file):
-                raise FileNotFoundError(f"Missing stderr file: {stderr_file}")
-            try:
-                operations = self._parse_final_operations_from_stderr(stderr_file)
-            except ValueError as e:
-                logger.warning(
-                    "Failed to parse final summary from %s: %s. Falling back to stdout.jsonl.",
-                    stderr_file,
-                    e,
-                )
-                if not self.charm.workload.file_exists(stdout_file):
-                    raise FileNotFoundError(f"Missing stdout file: {stdout_file}")
-                aggregates = self._aggregate_jsonl_results(stdout_file)
-                operations = self._build_operations_from_aggregates(aggregates)
-        else:
+        def _build_operations_from_stdout() -> dict[str, Any]:
             if not self.charm.workload.file_exists(stdout_file):
                 raise FileNotFoundError(f"Missing stdout file: {stdout_file}")
             aggregates = self._aggregate_jsonl_results(stdout_file)
-            operations = self._build_operations_from_aggregates(aggregates)
+            return self._build_operations_from_aggregates(aggregates)
+
+        is_test_active = self.charm.cluster_state.cluster.is_test_active
+        operations: dict[str, dict[str, Any]] = {}
+
+        if not is_test_active:
+            # test has concluded, so we can look for final summary in stderr
+            # also, summary file should already be present with test metadata
+            if not self.charm.workload.file_exists(summary_path):
+                raise FileNotFoundError(f"Missing summary file: {summary_path}")
+            metadata = self._read_test_metadata_from_summary_file(test_dir_path).to_dict()
+            try:
+                operations = self._parse_final_operations_from_stderr(stderr_file)
+            except (ValueError, FileNotFoundError) as e:
+                logger.warning(
+                    f"Failed to parse final summary from {stderr_file}: {e}. "
+                    f"Falling back to stdout.jsonl."
+                )
+                operations = _build_operations_from_stdout()
+
+        else:
+            # test is still in progress. Prepare summary from stdout
+            # also, test metadata should be present in peer relation, so we can read it from there
+            metadata = self._read_test_metadata_from_peer_relation_databag().to_dict()
+            operations = _build_operations_from_stdout()
 
         summary = {
-            "metadata": metadata.to_dict(),
+            "metadata": metadata,
             "operations": operations,
         }
 
         summary_json = json.dumps(summary, indent=2)
 
         # persist summary if test has stopped, as no further changes expected
-        if not metadata.is_active:
+        if not is_test_active:
             with summary_path.open("w") as f:
                 f.write(summary_json + "\n")
 
         return summary_json
 
+    def _read_test_metadata_from_summary_file(self, test_dir_path: Path) -> BenchmarkMetadata:
+        """Read benchmark metadata from summary.json."""
+        summary_path = test_dir_path / SUMMARY_JSON_FILE_NAME
+        if not self.charm.workload.file_exists(summary_path):
+            raise FileNotFoundError(f"Missing summary file in {test_dir_path}")
+
+        with summary_path.open(encoding="utf-8") as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError(f"Malformed summary file in {test_dir_path}: expected JSON object")
+
+        metadata = data.get("metadata")
+        if not isinstance(metadata, dict):
+            raise ValueError(
+                f"Malformed summary file in {test_dir_path}: missing 'metadata' object"
+            )
+
+        return BenchmarkMetadata.from_dict(metadata)
+
     def _parse_final_operations_from_stderr(self, stderr_path: Path) -> dict[str, dict[str, Any]]:
         """Parse the final read/write summary blocks from stderr.log."""
+        if not self.charm.workload.file_exists(stderr_path):
+            raise FileNotFoundError(f"Missing stderr file: {stderr_path}")
+
         stderr_text = stderr_path.read_text(encoding="utf-8")
 
         block_pattern = re.compile(

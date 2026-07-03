@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import shlex
@@ -111,37 +110,6 @@ def _duration_expired(start_time: float, duration: int) -> bool:
     return (time.monotonic() - start_time) >= duration
 
 
-def _mark_test_complete(results_dir: str) -> None:
-    """Update metadata.json with is_active=false on runner exit."""
-    metadata_path = Path(results_dir).parent / "metadata.json"
-    if not metadata_path.exists():
-        logger.warning("metadata.json not found at %s; skipping is_active update", metadata_path)
-        return
-
-    try:
-        with metadata_path.open("r", encoding="utf-8") as f:
-            metadata = json.load(f)
-    except (json.JSONDecodeError, OSError) as e:
-        logger.exception("Failed to read metadata.json: %s", e)
-        return
-
-    if not isinstance(metadata, dict):
-        logger.error("metadata.json does not contain a JSON object: %s", metadata_path)
-        return
-
-    metadata["is_active"] = False
-
-    try:
-        with metadata_path.open("w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=2)
-            f.write("\n")
-    except OSError:
-        logger.exception("Failed to write metadata.json: %s", metadata_path)
-        return
-
-    logger.info("Marked test inactive in metadata.json at %s", metadata_path)
-
-
 def _clear_benchmark_data() -> None:
     """Clear any benchmark-written data left in etcd."""
     endpoints = _str_env("ETCD_BENCHMARK_ENDPOINTS", "")
@@ -222,7 +190,6 @@ def main() -> int:
 
     def _finalize_exit(exit_code: int) -> int:
         _clear_benchmark_data()
-        _mark_test_complete(results_dir)
         return exit_code
 
     if not results_dir:

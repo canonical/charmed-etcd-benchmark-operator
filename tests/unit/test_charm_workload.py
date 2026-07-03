@@ -178,11 +178,15 @@ def test_start_failure():
 
 
 def test_run_action_fails_when_already_running():
-    """Run action should fail when a benchmark service is already running."""
+    """Run action should fail when a benchmark is already active in cluster state."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
-    with patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=True):
+    with patch(
+        "core.cluster.EtcdBenchmarkCluster.is_test_active",
+        new_callable=PropertyMock,
+        return_value=True,
+    ):
         with pytest.raises(ActionFailed) as e:
             ctx.run(ctx.on.action("run"), state_in)
 
@@ -193,10 +197,9 @@ def test_run_action_fails_when_already_running():
 def test_run_action_fails_without_relation():
     """Run action should fail if the etcd relation is missing."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with (
-        patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False),
         patch(
             "core.interfaces.EtcdInterfaceState.relation",
             new_callable=PropertyMock,
@@ -216,7 +219,7 @@ def test_run_action_fails_without_relation():
 def test_run_action_success():
     """Run action should set up and start the benchmark service."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     benchmark_config = {"results_dir": "/tmp/results", "some": "config"}
     metrics_config = {
@@ -228,7 +231,6 @@ def test_run_action_success():
     }
 
     with (
-        patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False),
         patch(
             "core.interfaces.EtcdInterfaceState.relation",
             new_callable=PropertyMock,
@@ -270,10 +272,9 @@ def test_run_action_success():
 def test_run_action_fails_when_start_service_raises_systemd_error():
     """Run action should fail with clear error when benchmark startup fails."""
     ctx = testing.Context(CharmedEtcdBenchmarkOperatorCharm)
-    state_in = testing.State()
+    state_in = testing.State(leader=True)
 
     with (
-        patch("workload.EtcdBenchmarkWorkload.is_benchmark_running", return_value=False),
         patch(
             "core.interfaces.EtcdInterfaceState.relation",
             new_callable=PropertyMock,
@@ -286,7 +287,7 @@ def test_run_action_fails_when_start_service_raises_systemd_error():
         ),
         patch(
             "managers.etcd_benchmark.EtcdBenchmarkManager.setup_test",
-            return_value={"results_dir": "/tmp/results"},
+            return_value={"results_dir": "/tmp/results", "current_test_id": "test-1"},
         ),
         patch(
             "managers.metrics_exporter.MetricsExporterManager.setup_metrics_exporter",
@@ -300,12 +301,16 @@ def test_run_action_fails_when_start_service_raises_systemd_error():
                 detailed_description="Error starting benchmark service: failed",
             ),
         ),
+        patch(
+            "managers.etcd_benchmark.EtcdBenchmarkManager.mark_current_test_completed"
+        ) as mark_completed,
     ):
         with pytest.raises(ActionFailed) as e:
             ctx.run(ctx.on.action("run"), state_in)
 
     assert "Error starting benchmark service: failed" in str(e.value)
     assert ctx.action_results == {"error": "Benchmark service could not be started cleanly"}
+    mark_completed.assert_called_once_with()
 
 
 # Direct workload tests: file utilities

@@ -65,14 +65,14 @@ class TLSEvents(Object):
         cert = certs[0]
 
         if cert.certificate != event.certificate:
-            logger.error("Received certificate does not match assigned certificate: %s", cert)
+            logger.error(f"Received certificate does not match assigned certificate: {cert}")
             return
 
         try:
             self.charm.workload.write_file(content=cert.certificate.raw, file=CLIENT_CERT_PATH)
             self.charm.workload.write_file(content=private_key.raw, file=CLIENT_KEY_PATH)
         except Exception as e:
-            logger.error("Error writing TLS certificates to disk: %s", e)
+            logger.error(f"Error writing TLS certificates to disk: {e}")
             self.charm.unit.status = ops.BlockedStatus("Error writing TLS certificates to disk")
             return
 
