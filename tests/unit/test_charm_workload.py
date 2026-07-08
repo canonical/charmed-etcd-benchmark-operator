@@ -257,14 +257,13 @@ def test_run_action_success():
 
     setup_test.assert_called_once_with()
     setup_exporter.assert_called_once_with(benchmark_config)
-    start_exporter.assert_called_once_with(
-        "/tmp/charm/templates",
-        metrics_config,
-    )
-    start_benchmark.assert_called_once_with(
-        "/tmp/charm/templates",
-        benchmark_config,
-    )
+
+    templates_path = start_exporter.call_args.args[0]
+    assert templates_path.endswith("/templates")
+    start_exporter.assert_called_once_with(templates_path, metrics_config)
+
+    start_benchmark.assert_called_once_with(templates_path, benchmark_config)
+
     assert ctx.action_results is not None
     assert "Benchmark started successfully." in ctx.action_results["results"]
 

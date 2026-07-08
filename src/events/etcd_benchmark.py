@@ -127,10 +127,10 @@ class EtcdBenchmarkEvents(Object):
             metrics_config = self.charm.metrics_exporter_manager.setup_metrics_exporter(
                 benchmark_config
             )
-            templates_path = self.charm.charm_dir / "templates"
+            templates_path_str = str(self.charm.charm_dir / "templates")
 
-            self.charm.workload.start_metrics_exporter(templates_path, metrics_config)
-            self.charm.workload.start_benchmark(templates_path, benchmark_config)
+            self.charm.workload.start_metrics_exporter(templates_path_str, metrics_config)
+            self.charm.workload.start_benchmark(templates_path_str, benchmark_config)
 
             event.set_results(
                 {
