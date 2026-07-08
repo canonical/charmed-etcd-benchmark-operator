@@ -54,7 +54,7 @@ class EtcdBenchmarkManager(Object):
         # Return test configs to be passed to runner.
 
         uris = self.charm.etcd_interface_state.uris
-        logger.debug(f"Endpoints available for txn-mixed: {uris}")
+        logger.debug("Endpoints available for txn-mixed: %s", uris)
 
         started_at = datetime.now(UTC)
         test_id = generate_test_id(started_at)
@@ -137,7 +137,7 @@ class EtcdBenchmarkManager(Object):
                         summary_data = existing
                 except (OSError, json.JSONDecodeError):
                     logger.warning(
-                        f"summary.json at {summary_path} is unreadable; recreating file"
+                        "summary.json at %s is unreadable; recreating file", summary_path
                     )
 
             summary_data["metadata"] = metadata.to_dict()
@@ -149,7 +149,7 @@ class EtcdBenchmarkManager(Object):
 
         except ValueError as e:
             error_str = "Failed to write metadata to summary.json"
-            logger.error(f"{error_str}: {e}")
+            logger.error("%s: %s", error_str, e)
             raise BenchmarkStateError(message=error_str, detailed_description=f"{error_str}: {e}")
 
     def get_test_summary(self, test_id: str) -> str | None:
@@ -169,14 +169,14 @@ class EtcdBenchmarkManager(Object):
                         return json.dumps(cached_summary, indent=2)
                 except (ValueError, OSError):
                     logger.warning(
-                        f"summary.json at {summary_path} malformed; "
-                        f"preparing summary from stdout.jsonl."
+                        "summary.json at %s malformed; preparing summary from stdout.jsonl.",
+                        summary_path,
                     )
 
             return self._prepare_and_write_summary(test_dir)
         except (OSError, ValueError, KeyError) as e:
             error_str = "Error preparing/writing summary"
-            logger.error(f"{error_str}: {e}")
+            logger.error("%s: %s", error_str, e)
             raise BenchmarkResultsParseError(
                 message=error_str, detailed_description=f"{error_str}: {e}"
             )
@@ -280,8 +280,9 @@ class EtcdBenchmarkManager(Object):
                 operations = self._parse_final_operations_from_stderr(stderr_file)
             except (ValueError, FileNotFoundError) as e:
                 logger.warning(
-                    f"Failed to parse final summary from {stderr_file}: {e}. "
-                    f"Falling back to stdout.jsonl."
+                    "Failed to parse final summary from %s: %s. Falling back to stdout.jsonl.",
+                    stderr_file,
+                    e,
                 )
                 operations = _build_operations_from_stdout()
 

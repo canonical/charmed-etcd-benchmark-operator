@@ -31,7 +31,7 @@ class TLSState(Object):
         unit = self.charm.unit.name.replace("/", "")
         model_id = self.charm.model.uuid.split("-")[0]
         cn = f"{unit}-{model_id}"
-        logger.debug(f"Computed common_name: {cn} (len={len(cn)})")
+        logger.debug("Computed common_name: %s (len=%d)", cn, len(cn))
         return cn
 
     @property

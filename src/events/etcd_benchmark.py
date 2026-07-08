@@ -5,7 +5,6 @@
 """Handle etcd benchmark tool related events."""
 
 import logging
-import os
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -68,11 +67,11 @@ class EtcdBenchmarkEvents(Object):
                 )
                 Path(runner_file_path).chmod(0o755)
         except snap.SnapError as e:
-            logger.error(f"Error installing workload: {e.message}")
+            logger.error("Error installing workload: %s", e.message)
             self.charm.unit.status = ops.BlockedStatus("Error installing the workload")
             return
         except OSError as e:
-            logger.error(f"Error setting up runner file: {e}")
+            logger.error("Error setting up runner file: %s", e)
             self.charm.unit.status = ops.BlockedStatus("Error setting up runner file")
             return
 
@@ -125,17 +124,13 @@ class EtcdBenchmarkEvents(Object):
         benchmark_config = None
         try:
             benchmark_config = self.charm.etcd_benchmark_manager.setup_test()
-
             metrics_config = self.charm.metrics_exporter_manager.setup_metrics_exporter(
                 benchmark_config
             )
-            self.charm.workload.start_metrics_exporter(
-                f"{os.environ.get('CHARM_DIR', '')}/templates", metrics_config
-            )
+            templates_path = self.charm.charm_dir / "templates"
 
-            self.charm.workload.start_benchmark(
-                f"{os.environ.get('CHARM_DIR', '')}/templates", benchmark_config
-            )
+            self.charm.workload.start_metrics_exporter(templates_path, metrics_config)
+            self.charm.workload.start_benchmark(templates_path, benchmark_config)
 
             event.set_results(
                 {
