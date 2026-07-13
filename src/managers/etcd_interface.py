@@ -13,7 +13,7 @@ from charms.data_platform_libs.v1.data_interfaces import (
 )
 from ops import Object
 
-from utils.certificates import get_common_name_from_chain
+from utils.utils import get_common_name_from_chain
 
 if TYPE_CHECKING:
     from charm import CharmedEtcdBenchmarkOperatorCharm
@@ -43,8 +43,11 @@ class EtcdInterfaceManager(Object):
 
     def update_request_from_cert(self, cert: Certificate) -> None:
         """Update the requests in the relation data bag from the assigned certificates."""
-        local_model = self.charm.etcd_interface_state.local_model
-        if not local_model:
+        if not self.charm.unit.is_leader():
+            logger.info("Skipping etcd-client relation update on non-leader unit")
+            return
+
+        if not (local_model := self.charm.etcd_interface_state.local_model):
             return
 
         request_common_names = {

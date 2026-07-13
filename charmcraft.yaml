@@ -21,46 +21,120 @@ parts:
     source: .
     build-snaps:
       - astral-uv
+    override-build: |
+      craftctl default
+      cp -r templates "$CRAFT_PART_INSTALL/templates"
+  benchmark-tool: #TODO remove once benchmark tool is available in charmed-etcd snap
+    plugin: dump
+    source: https://github.com/Soundarya03/etcd.git
+    source-type: git
+    source-branch: feat/benchmark-tool
+    build-snaps: [ go/latest/stable ]
+    override-build: |
+      export GOBIN="$CRAFT_PART_INSTALL/bin"
+      go install -v ./tools/benchmark
 
 
 actions:
-# TODO: implement remaining actions, in line with DP's other benchmarking operators
-# prepare:
-#    description: |
-#      Prepares the workload.
-#
+
   run:
     description: |
       Kickstart the benchmark service.
-#
-#  stop:
-#    description: |
-#      Stops the benchmark service.
-#
-#  get-summary:
-#    description: |
-#      Allow for the test result to be obtained in cases when COS or Upload are not needed.
-#      The benchmark result collection happens anyways and is be stored in a folder within the unit.
-#      It reports in the output (either table or json) where the user can find the collection tarball
-#      in its own filesystem in addition to basic test results
-#      (e.g. time elapsed, queries executed, queries per second, etc).
-#    parameters:
-#      output:
-#        description: |
-#          The output format of the summary. It can be either a table or a json.
-#        type: string
-#        enum: [ table, json ]
-#
-#  cleanup:
-#    description: |
-#      Cleans up the workload from the application and unsets all the prepared configuration.
-#
-#
+
+  stop:
+    description: |
+      Stop the benchmark service.
+
+  list-tests:
+    description: |
+      List all the IDs of tests run so far, sorted newest first.
+
+  get-summary:
+    description: |
+      Retrieve human-friendly summary of the results of a test, in json format.
+    params:
+      test-id:
+        description: |
+          The ID of the test whose summary is needed. Available tests can be viewed using the list-tests action.
+        type: string
+
+
 config:
   options:
+    test-name:
+      default: "etcd-benchmark"
+      type: string
+      description: |
+        Name of the test. Each benchmark run will also be given a unique ID, but this is a human-friendly config option.
+    clients:
+      default: 1
+      type: int
+      description: |
+        Total number of gRPC clients to use during the test.
+    connections:
+      default: 1
+      type: int
+      description: |
+        Total number of gRPC connections to open during the test.
+    duration:
+      default: 0
+      type: int
+      description: |
+        Duration of the test in seconds, at the end of which it must auto terminate. 
+        In case both are set, the test will terminate as per whichever condition is met sooner. 
+        If both are unset (default=0), the test goes on indefinitely until the `stop` action is run. 
+        Note that you can still use the `stop` action to terminate the test gracefully, ahead of time.
+    total-transactions:
+      default: 0
+      type: int
+      description: |
+        Total transactions to be run as part of a benchmark run, at the end of which test must auto terminate. 
+        In case both are set, the test will terminate as per whichever condition is met sooner. 
+        If both are unset (default=0), the test goes on indefinitely until the `stop` action is run. 
+        Note that you can still use the `stop` action to terminate the test gracefully, ahead of time.
+    rate:
+      default: 0
+      type: int
+      description: |
+        Maximum transactions per second. 0, which is the default, means no limit.
+    key-size:
+      default: 8
+      type: int
+      description: |
+        Size of the keys to set in bytes.
+    key-space-size:
+      default: 1000
+      type: int
+      description: |
+        Maximum possible keys. Controls entropy during key generation. |
+        1 would mean a single key keeps getting overwritten. 100000, on the other hand, would mean an append-heavy workload.
+    value-size:
+      default: 8
+      type: int
+      description: |
+        Size of the values to set in bytes.
+    limit:
+      default: 1000
+      type: int
+      description: |
+        Read operation range result limit.
+    rw-ratio:
+      default: 1.0
+      type: float
+      description: |
+        Read/write ratio. For example, if set to 4, it will execute 4 times more read requests than write requests.
+    report-interval:
+      default: 10
+      type: int
+      description: |
+        Interval, in seconds, to report performance metrics collected.
 
 requires:
   etcd-client:
     interface: etcd_client
   certificates:
     interface: tls-certificates
+
+peers:
+  benchmark-peers:
+    interface: benchmark_peers

@@ -9,12 +9,15 @@ import logging
 import ops
 
 import workload
+from core.cluster import ClusterState
 from core.interfaces import EtcdInterfaceState
 from core.tls import TLSState
 from events.etcd_benchmark import EtcdBenchmarkEvents
 from events.etcd_interface import EtcdInterfaceEvents
 from events.tls import TLSEvents
+from managers.etcd_benchmark import EtcdBenchmarkManager
 from managers.etcd_interface import EtcdInterfaceManager
+from managers.metrics_exporter import MetricsExporterManager
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +30,12 @@ class CharmedEtcdBenchmarkOperatorCharm(ops.CharmBase):
         self.workload = workload.EtcdBenchmarkWorkload()
 
         # --- MANAGERS ---
+        self.etcd_benchmark_manager = EtcdBenchmarkManager(self)
         self.etcd_interface_manager = EtcdInterfaceManager(self)
+        self.metrics_exporter_manager = MetricsExporterManager()
 
         # --- STATE ---
+        self.cluster_state = ClusterState(self)
         self.etcd_interface_state = EtcdInterfaceState(self)
         self.tls_state = TLSState(self)
 

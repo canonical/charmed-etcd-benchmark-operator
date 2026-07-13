@@ -63,4 +63,4 @@ class EtcdInterfaceEvents(Object):
             logger.error("No username available")
             return
 
-        self.charm.workload.write_file(response.tls_ca, CA_CERT_PATH)
+        self.charm.workload.write_file(content=response.tls_ca, file=CA_CERT_PATH)

@@ -69,8 +69,8 @@ class TLSEvents(Object):
             return
 
         try:
-            self.charm.workload.write_file(cert.certificate.raw, CLIENT_CERT_PATH)
-            self.charm.workload.write_file(private_key.raw, CLIENT_KEY_PATH)
+            self.charm.workload.write_file(content=cert.certificate.raw, file=CLIENT_CERT_PATH)
+            self.charm.workload.write_file(content=private_key.raw, file=CLIENT_KEY_PATH)
         except Exception as e:
             logger.error("Error writing TLS certificates to disk: %s", e)
             self.charm.unit.status = ops.BlockedStatus("Error writing TLS certificates to disk")

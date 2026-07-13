@@ -41,8 +41,7 @@ class TLSState(Object):
 
     def get_stored_certificate_of_common_name(self, common_name: str) -> str | None:
         """Return the stored certificate if it matches the provided common name."""
-        raw_cert = self.stored_certificate_raw
-        if not raw_cert:
+        if not (raw_cert := self.stored_certificate_raw):
             return None
         if Certificate(raw=raw_cert).common_name == common_name:
             return raw_cert
