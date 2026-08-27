@@ -38,5 +38,5 @@ def test_setup_metrics_exporter_uses_defaults_when_values_missing():
         "metrics_port": METRICS_PORT,
         "python_bin": "/venv/bin/python",
         "runner_path": METRICS_EXPORTER_RUNNER_FILE_PATH,
-        "report_interval": 10
+        "report_interval": 10,
     }
