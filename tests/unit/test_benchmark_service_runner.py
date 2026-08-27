@@ -188,6 +188,8 @@ class _FakeProcess:
         self.returncode = returncode
         self._polls = polls
         self.pid = 12345
+        self.stdout = MagicMock()
+        self.stderr = MagicMock()
 
     def poll(self) -> int | None:
         if self._polls:

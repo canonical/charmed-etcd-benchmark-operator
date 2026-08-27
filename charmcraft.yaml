@@ -24,15 +24,6 @@ parts:
     override-build: |
       craftctl default
       cp -r templates "$CRAFT_PART_INSTALL/templates"
-  benchmark-tool:
-    plugin: dump
-    source: https://github.com/Soundarya03/etcd.git
-    source-type: git
-    source-branch: feat/benchmark-tool
-    build-snaps: [ go/latest/stable ]
-    override-build: |
-      export GOBIN="$CRAFT_PART_INSTALL/bin"
-      go install -v ./tools/benchmark
 
 
 actions:

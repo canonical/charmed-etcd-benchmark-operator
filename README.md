@@ -124,7 +124,7 @@ The steps below can be followed to view a grafana dashboard of the benchmark res
 ```bash
 juju add-model cos
 
-curl -L https://raw.githubusercontent.com/canonical/cos-lite-bundle/main/overlays/storage-small-overlay.yaml -O
+curl -L https://raw.githubusercontent.com/canonical/cos-lite-bundle/main/overlays/offers-overlay.yaml -O
 
 juju deploy cos-lite \
         --trust \
