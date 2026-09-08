@@ -12,6 +12,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -81,8 +82,7 @@ def _build_command() -> list[str]:
         # until either (case 1). stop action is run OR (case 2). duration, if set to a non-zero value, is exceeded.
 
     cmd = [
-        # TODO replace with charmed-etcd.benchmark snap command when available
-        "/var/lib/juju/agents/unit-charmed-etcd-benchmark-operator-0/charm/bin/benchmark",
+        "charmed-etcd.benchmark",
         "txn-mixed",
         "--endpoints", endpoints,
         "--cert", client_cert_path,
@@ -150,6 +150,16 @@ def _clear_benchmark_data() -> None:
 
     if proc.returncode != 0:
         logger.error("Benchmark cleanup failed with return code %s", proc.returncode)
+
+
+def _drain_pipe(pipe, file_obj) -> None:
+    """Read lines from a pipe and write them to a file, flushing after each line."""
+    try:
+        for line in pipe:
+            file_obj.write(line)
+            file_obj.flush()
+    except Exception:
+        logger.exception("Error draining pipe to file")
 
 
 def main() -> int:
@@ -222,13 +232,17 @@ def main() -> int:
         )
         return _finalize_exit(1)
 
+    stdout_thread: threading.Thread | None = None
+    stderr_thread: threading.Thread | None = None
+    proc: subprocess.Popen | None = None
+
     try:
         try:
             proc = subprocess.Popen(
                 cmd,
                 stdin=subprocess.DEVNULL,
-                stdout=stdout_file,
-                stderr=stderr_file,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 preexec_fn=os.setsid,
             )
@@ -238,6 +252,15 @@ def main() -> int:
         except Exception:
             logger.exception("Failed to start benchmark command")
             return _finalize_exit(1)
+
+        stdout_thread = threading.Thread(
+            target=_drain_pipe, args=(proc.stdout, stdout_file), daemon=True
+        )
+        stderr_thread = threading.Thread(
+            target=_drain_pipe, args=(proc.stderr, stderr_file), daemon=True
+        )
+        stdout_thread.start()
+        stderr_thread.start()
 
         try:
             while True:
@@ -281,6 +304,15 @@ def main() -> int:
         logger.info("Benchmark runner exiting cleanly...")
         return _finalize_exit(0)
     finally:
+        if stdout_thread:
+            stdout_thread.join(timeout=5)
+        if stderr_thread:
+            stderr_thread.join(timeout=5)
+        if proc:
+            if proc.stdout:
+                proc.stdout.close()
+            if proc.stderr:
+                proc.stderr.close()
         stdout_file.close()
         stderr_file.close()
 
