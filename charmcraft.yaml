@@ -2,14 +2,17 @@
 # See https://documentation.ubuntu.com/charmcraft/stable/reference/files/charmcraft-yaml-file/
 type: charm
 name: charmed-etcd-benchmark-operator
-title: Charm for etcd benchmarking tool
-summary: A charm of the etcd benchmark tool, to be used to carry out performance benchmarking of charmed-etcd
+title: etcd benchmarking tool VM operator
+summary: A Juju machine charm of the etcd benchmark tool, to be used to carry out performance benchmarking of charmed-etcd
 description: |
   This is a performance benchmarking charm for etcd.
 
   It packages the benchmark tool from upstream etcd as a charm, and integrates with charmed-etcd over the etcd_client interface. 
   It offers a run action to the user, which drives traffic to the etcd server and collects performance metrics. Various configs are made
   available in the charm to tune the requests per second, number of connections, etc.
+links:
+  source:
+  - https://github.com/canonical/charmed-etcd-benchmark-operator
 
 platforms:
   ubuntu@24.04:amd64:
@@ -24,6 +27,11 @@ parts:
     override-build: |
       craftctl default
       cp -r templates "$CRAFT_PART_INSTALL/templates"
+  extra-files:
+    plugin: dump
+    source: .
+    stage:
+      - icon.svg
 
 
 actions:
