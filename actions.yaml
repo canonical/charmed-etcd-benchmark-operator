@@ -1,0 +1,23 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+run:
+  description: |
+    Kickstart the benchmark service.
+
+stop:
+  description: |
+    Stop the benchmark service.
+
+list-tests:
+  description: |
+    List all the IDs of tests run so far, sorted newest first.
+
+get-summary:
+  description: |
+    Retrieve human-friendly summary of the results of a test, in json format.
+  params:
+    test-id:
+      description: |
+        The ID of the test whose summary is needed. Available tests can be viewed using the list-tests action.
+      type: string

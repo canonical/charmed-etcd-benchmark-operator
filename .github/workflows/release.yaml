@@ -1,0 +1,72 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: Release to Charmhub
+
+on:
+  push:
+    branches:
+      - main
+      - feat/release-to-charmhub #TODO remove before merge.Temporary change to test the release workflow
+
+jobs:
+  build:
+    name: Build charm | ${{ matrix.platform }}
+    strategy:
+      matrix:
+        include:
+          - platform: ubuntu@24.04:amd64
+            platform-in-artifact: ubuntu@24.04-amd64
+            runner: ubuntu-latest
+          - platform: ubuntu@24.04:arm64
+            platform-in-artifact: ubuntu@24.04-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install LXD
+        run: |
+          sudo snap install lxd
+          sudo adduser "$USER" lxd
+          sudo --user "$USER" --preserve-env --preserve-env=PATH -- env -- lxd waitready
+          sudo --user "$USER" --preserve-env --preserve-env=PATH -- env -- lxd init --auto
+          # Workaround for Docker & LXD on same machine
+          sudo iptables -F FORWARD
+          sudo iptables -P FORWARD ACCEPT
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+      - name: Pack charm
+        run: sudo --user "$USER" --preserve-env --preserve-env=PATH -- env -- charmcraft pack -v --platform='${{ matrix.platform }}'
+      - name: Charmcraft logs
+        if: ${{ success() || failure() }}
+        run: cat ~/.local/state/charmcraft/log/* || true
+      - name: Upload charm package
+        uses: actions/upload-artifact@v4
+        with:
+          name: packed-charm-.--platform-${{ matrix.platform-in-artifact }}
+          path: "*.charm"
+          if-no-files-found: error
+
+  ci-tests:
+    name: Tests
+    uses: ./.github/workflows/ci.yaml
+    secrets: inherit
+    permissions:
+      contents: write
+
+  release:
+    name: Release charm
+    needs:
+      - build
+      - ci-tests
+    uses: canonical/data-platform-workflows/.github/workflows/release_charm_edge.yaml@v42.1.0
+    with:
+      track: latest
+      artifact-prefix: packed-charm
+    secrets:
+      charmhub-token: ${{ secrets.CHARMHUB_TOKEN }}
+    permissions:
+      contents: write
