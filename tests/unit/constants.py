@@ -1,0 +1,1 @@
+ETCD_BENCHMARK = "etcd-benchmark"

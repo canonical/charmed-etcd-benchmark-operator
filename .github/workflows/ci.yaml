@@ -96,5 +96,5 @@ jobs:
         uses: canonical/charm-logdump-action@main
         if: failure()
         with:
-          app: charmed-etcd-benchmark-operator
+          app: etcd-benchmark
           model: ${{ env.JUJU_TESTING_MODEL }}

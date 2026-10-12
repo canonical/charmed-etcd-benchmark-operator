@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 
 [project]
-name = "charmed-etcd-benchmark-operator"
+name = "etcd-benchmark"
 version = "0.0.1"
 requires-python = ">=3.10"
 
