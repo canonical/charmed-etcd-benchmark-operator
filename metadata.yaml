@@ -1,7 +1,7 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-name: charmed-etcd-benchmark-operator
+name: etcd-benchmark
 title: etcd benchmarking tool VM operator
 summary: A Juju machine charm of the etcd benchmark tool, to be used to carry out performance benchmarking of charmed-etcd
 description: |
