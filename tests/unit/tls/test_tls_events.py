@@ -48,9 +48,9 @@ def test_tls_events_init_constructs_tls_requires():
     assert len(kwargs["certificate_requests"]) == 1
 
     request = kwargs["certificate_requests"][0]
-    assert request.common_name.startswith(f"${ETCD_BENCHMARK}0-")
+    assert request.common_name.startswith(f"{ETCD_BENCHMARK}0-")
     assert request.sans_ip == frozenset({"10.1.2.3"})
-    assert request.sans_dns == frozenset({f"${ETCD_BENCHMARK}/0", "test-host"})
+    assert request.sans_dns == frozenset({f"{ETCD_BENCHMARK}/0", "test-host"})
 
     assert "refresh_events" in kwargs
     assert len(kwargs["refresh_events"]) == 1
