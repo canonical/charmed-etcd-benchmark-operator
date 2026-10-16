@@ -8,7 +8,7 @@ Avoid using this README file for information that is maintained or published els
 Use links instead.
 -->
 
-# charmed-etcd-benchmark-operator
+# etcd-benchmark
 
 This is a machine charm for the [etcd benchmarking tool](https://github.com/etcd-io/etcd/tree/main/tools/benchmark).
 It is meant to be deployed alongside charmed-etcd, in order to carry out performance benchmarking of the charmed etcd cluster.
@@ -28,18 +28,18 @@ juju add-model etcd-benchmarking
 3. Deploy the packed benchmark charm. 
 Then deploy [charmed-etcd](https://charmhub.io/charmed-etcd?channel=3.6/edge) from [Charmhub](https://charmhub.io/), with as many units as needed.
 ```bash
-juju deploy ./charmed-etcd-benchmark-operator_ubuntu@24.04-amd64.charm
+juju deploy ./etcd-benchmark_ubuntu@24.04-amd64.charm
 
 juju deploy charmed-etcd --channel 3.6/edge -n 2
 ```
 
 > [!NOTE]
 > The benchmark charm currently does not support scaling, and is meant to be deployed as a single unit.
-> Technically, you can scale the charmed-etcd-benchmark-operator charm to multiple units today, 
+> Technically, you can scale the etcd-benchmark charm to multiple units today, 
 > but you will not be able to run any benchmark actions (`run`, `list-tests`, or any others) on a non-leader unit.
 
 4. As described in the [charmed-etcd docs](https://canonical-charmed-etcd.readthedocs-hosted.com/), we will need TLS certificates in order to integrate charmed-etcd with 
-client applications (in our case, charmed-etcd-benchmark-operator). Let's deploy the self-signed-certificate charm to help us with this.
+client applications (in our case, etcd-benchmark). Let's deploy the self-signed-certificate charm to help us with this.
 ```bash
 juju deploy self-signed-certificates --channel edge
 ```
@@ -50,63 +50,63 @@ juju status --watch 3s --integrations
 ```
 
 5. Once all three deployed applications are active and all agents idle, 
-integrate self-signed-certificates with charmed-etcd and charmed-etcd-benchmark-operator.
+integrate self-signed-certificates with charmed-etcd and etcd-benchmark.
 ```bash
 juju integrate charmed-etcd:client-certificates self-signed-certificates
 
-juju integrate charmed-etcd-benchmark-operator self-signed-certificates
+juju integrate etcd-benchmark self-signed-certificates
 ```
 
-6. Once agents and apps have settled and integrations are available, the charmed-etcd-benchmark-operator
+6. Once agents and apps have settled and integrations are available, the etcd-benchmark
 can now be integrated with charmed-etcd. 
 ```bash
-juju integrate charmed-etcd-benchmark-operator charmed-etcd
+juju integrate etcd-benchmark charmed-etcd
 ```
 
 7. Wait for the apps and agents to settle, and for the integrations to be established.
 Finally, the benchmarking action, `run`, can now be run.
 ```bash
-juju run charmed-etcd-benchmark-operator/leader run
+juju run etcd-benchmark/leader run
 ```
 
 8. By default, the run action will initiate the benchmark, and it will continue to run indefinitely, 
 until it is stopped with the `stop` action. 
 ```bash
-juju run charmed-etcd-benchmark-operator/leader stop
+juju run etcd-benchmark/leader stop
 ```
 
 9. Alternatively, there are two ways to bound the benchmark run: setting the `duration` (in seconds), or `total-transaction` configs. The test will terminate accordingly.
 In case both are set, the test will terminate when either of the conditions is met.
 ```bash
-juju config charmed-etcd-benchmark-operator duration=1200
+juju config etcd-benchmark duration=1200
 
-juju config charmed-etcd-benchmark-operator total-transactions=100000
+juju config etcd-benchmark total-transactions=100000
 ```
 
 10. Another option of note is `report-interval`, which determines how often (in seconds) the benchmark results are reported. 
 By default, it is set to 10 seconds.
 ```bash
-juju config charmed-etcd-benchmark-operator report-interval=30
+juju config etcd-benchmark report-interval=30
 ```
 
 11. For a full list of config options, their implications and defaults, you can run the juju config command.
 A few examples are `test-name`, `rate`, `rw-ratio`, etc. which allow for further customization of the benchmark tests. 
 
 ```bash
-juju config charmed-etcd-benchmark-operator
+juju config etcd-benchmark
 
-juju config charmed-etcd-benchmark-operator test-name="my-etcd-benchmark" rate=200 rw-ratio=2
+juju config etcd-benchmark test-name="my-etcd-benchmark" rate=200 rw-ratio=2
 ```
 
 12. At any point in time, the tests—in progress or completed—can be viewed using the `list-tests` action. 
 This action will list all test-ids of the tests that have been initiated, along with their status (in-progress or finished).
 ```bash
-juju run charmed-etcd-benchmark-operator/leader list-tests
+juju run etcd-benchmark/leader list-tests
 ```
 
 13. To view the summary of a test, the `get-summary` action can be used with the test-id as a param.
 ```bash
-juju run charmed-etcd-benchmark-operator/leader get-summary --string-args test-id=<test-id>
+juju run etcd-benchmark/leader get-summary --string-args test-id=<test-id>
 ```
 
 14. Details are also logged to the juju log, and can be viewed using the following command:
@@ -139,11 +139,11 @@ juju consume <k8s_controller>:admin/cos.prometheus-receive-remote-write
 juju consume <k8s_controller>:admin/cos.grafana-dashboards
 ```
 
-3. Deploy grafana-agent in the same model as charmed-etcd-benchmark-operator, and integrate the charms.
+3. Deploy grafana-agent in the same model as etcd-benchmark, and integrate the charms.
 ```bash
 juju deploy grafana-agent --base ubuntu@24.04
 
-juju integrate grafana-agent charmed-etcd-benchmark-operator
+juju integrate grafana-agent etcd-benchmark
 ```
 
 4. Finally, integrate grafana-agent with the cos bundle offers.
