@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 
 name: etcd-benchmark
-title: etcd benchmarking tool VM operator
+display-name: etcd benchmarking tool VM operator
 summary: A Juju machine charm of the etcd benchmark tool, to be used to carry out performance benchmarking of charmed-etcd
 description: |
   This is a performance benchmarking charm for etcd.

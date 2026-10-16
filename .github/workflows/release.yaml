@@ -64,7 +64,7 @@ jobs:
       - ci-tests
     uses: canonical/data-platform-workflows/.github/workflows/release_charm_edge.yaml@v42.1.0
     with:
-      track: latest
+      track: 3.6
       artifact-prefix: packed-charm
     secrets:
       charmhub-token: ${{ secrets.CHARMHUB_TOKEN }}
