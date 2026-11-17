@@ -62,11 +62,11 @@ jobs:
     needs:
       - build
       - ci-tests
-    uses: canonical/data-platform-workflows/.github/workflows/release_charm_edge.yaml@v42.1.0
+    uses: canonical/data-platform-workflows/.github/workflows/release_charm_edge.yaml@v51.0.0
     with:
       track: 3.6
       artifact-prefix: packed-charm
     secrets:
-      charmhub-token: ${{ secrets.CHARMHUB_TOKEN }}
+      charmhub-token: ${{ secrets.CHARMHUB_TOKEN_EDGE }}
     permissions:
       contents: write
