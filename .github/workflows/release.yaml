@@ -6,7 +6,6 @@ on:
   push:
     branches:
       - main
-      - feat/release-to-charmhub #TODO remove before merge.Temporary change to test the release workflow
 
 jobs:
   build:
