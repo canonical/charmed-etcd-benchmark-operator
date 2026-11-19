@@ -15,7 +15,8 @@ It is meant to be deployed alongside charmed-etcd, in order to carry out perform
 
 ## Usage and local testing
 
-1. Navigate to the root of this project, and pack the charm.
+1. (Optional) If you wish to pack from source and test, navigate to the root of this project and pack the charm.
+
 ```bash
 charmcraft pack
 ```
@@ -25,12 +26,17 @@ charmcraft pack
 juju add-model etcd-benchmarking
 ```
 
-3. Deploy the packed benchmark charm. 
-Then deploy [charmed-etcd](https://charmhub.io/charmed-etcd?channel=3.6/edge) from [Charmhub](https://charmhub.io/), with as many units as needed.
+3. Deploy the [`etcd-benchmark` charm from Charmhub](https://charmhub.io/etcd-benchmark?channel=3.6/edge). 
+Then deploy [charmed-etcd](https://charmhub.io/charmed-etcd?channel=3.6/edge), again from [Charmhub](https://charmhub.io/), with as many units as needed.
 ```bash
-juju deploy ./etcd-benchmark_ubuntu@24.04-amd64.charm
+# From Charmhub
+juju deploy etcd-benchmark --channel 3.6/edge
 
 juju deploy charmed-etcd --channel 3.6/edge -n 2
+```
+If you wish to test the locally packed charm instead, you can deploy it like so:
+```bash
+juju deploy ./etcd-benchmark_ubuntu@24.04-amd64.charm
 ```
 
 > [!NOTE]
@@ -166,8 +172,6 @@ juju run grafana/leader get-admin-password --model cos
 ## Other resources
 
 <!-- If your charm is documented somewhere else other than Charmhub, provide a link separately. -->
-
-- [Read more](https://example.com)
 
 - [Contributing](CONTRIBUTING.md) <!-- or link to other contribution documentation -->
 
