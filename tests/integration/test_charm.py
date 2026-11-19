@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 ETCD_APP_NAME = "charmed-etcd"
 TLS_NAME = "self-signed-certificates"
-CHARMED_ETCD_BENCHMARK_OPERATOR = "charmed-etcd-benchmark-operator"
+CHARMED_ETCD_BENCHMARK_OPERATOR = "etcd-benchmark"
 GRAFANA_AGENT_APP_NAME = "grafana-agent"
 GRAFANA_AGENT_CHANNEL = "2/stable"
 PROMETHEUS_APP_NAME = "prometheus"

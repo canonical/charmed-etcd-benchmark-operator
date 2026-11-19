@@ -8,17 +8,18 @@ from unittest.mock import MagicMock, patch
 
 from core.tls import TLSState
 from literals import CLIENT_CERT_PATH
+from tests.unit.constants import ETCD_BENCHMARK
 
 
 def test_common_name_builds_expected_value():
     """common_name should be derived from unit name and first UUID segment."""
     charm = MagicMock()
-    charm.unit.name = "charmed-etcd-benchmark-operator/0"
+    charm.unit.name = f"{ETCD_BENCHMARK}/0"
     charm.model.uuid = "12345678-abcd-efgh-ijkl-1234567890ab"
 
     tls_state = TLSState(charm)
 
-    assert tls_state.common_name == "charmed-etcd-benchmark-operator0-12345678"
+    assert tls_state.common_name == f"{ETCD_BENCHMARK}0-12345678"
 
 
 def test_stored_certificate_raw_reads_file_from_workload():

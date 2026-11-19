@@ -36,7 +36,7 @@ def arch() -> str:
 @pytest.fixture
 def benchmark_charm(arch: str):
     """Path to the packed benchmark charm file to use for testing."""
-    charm_file = Path(f"./charmed-etcd-benchmark-operator_ubuntu@24.04-{arch}.charm")
+    charm_file = Path(f"./etcd-benchmark_ubuntu@24.04-{arch}.charm")
     if charm_file.exists():
         return charm_file
     try:
